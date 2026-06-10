@@ -200,8 +200,12 @@ async function generateProbe(session: Session, index: number): Promise<CachedPro
   const ai = getAI();
 
   if (entry.modality === "mcq") {
-    const { question } = await ai.probe("mcq", item.statement, null, avoid);
-    const options = shuffle([item.statement, ...item.distractors.slice(0, 3)]);
+    const [{ question }, freshDistractors] = await Promise.all([
+      ai.probe("mcq", item.statement, null, avoid),
+      entry.isRetry ? ai.distractors(item.statement, item.kind) : Promise.resolve(null),
+    ]);
+    const distractors = freshDistractors ?? item.distractors.slice(0, 3);
+    const options = shuffle([item.statement, ...distractors]);
     return { question, options, correctIndex: options.indexOf(item.statement) };
   }
   if (entry.modality === "cued") {

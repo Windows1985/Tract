@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { CalendarDays, ChevronDown, Pencil, Trash2, X } from "lucide-react";
-import { del, get, patch, post, type GoalItemView, type GoalView } from "../api";
+import { del, get, patch, post, type GoalItemView, type GoalView, type Kind } from "../api";
 import { fade, staggerOption } from "../motion";
 import { MathText } from "../components/Katex";
 import { MemoryBar, QuietButton } from "../components/widgets";
+
+const KINDS: Kind[] = ["fact", "concept", "distinction", "procedure"];
 
 // Category & topic management. Categories are goals; topics are the AI's
 // subtopic labels on items (e.g. Chemistry → Redox, Electrolysis). Removing
@@ -88,6 +90,14 @@ export function TopicsPanel({ onClose, onChanged }: { onClose: () => void; onCha
     onChanged();
   };
 
+  const editItem = async (goalId: string, itemId: string, fields: Partial<Pick<GoalItemView, "statement" | "kind" | "topic">>) => {
+    await patch(`/api/items/${itemId}`, fields);
+    setItems((m) => ({
+      ...m,
+      [goalId]: (m[goalId] ?? []).map((it) => (it.id === itemId ? { ...it, ...fields } : it)),
+    }));
+  };
+
   return (
     <motion.div
       {...fade}
@@ -133,6 +143,7 @@ export function TopicsPanel({ onClose, onChanged }: { onClose: () => void; onCha
                 onRemoveGoal={() => removeGoal(g.id)}
                 onRemoveTopic={(topic) => removeTopic(g.id, topic)}
                 onRemoveItem={(itemId) => removeItem(g.id, itemId)}
+                onEditItem={(itemId, fields) => editItem(g.id, itemId, fields)}
               />
             ))}
           </AnimatePresence>
@@ -156,6 +167,7 @@ function GoalCard({
   onRemoveGoal,
   onRemoveTopic,
   onRemoveItem,
+  onEditItem,
 }: {
   goal: GoalView;
   index: number;
@@ -170,6 +182,7 @@ function GoalCard({
   onRemoveGoal: () => void;
   onRemoveTopic: (topic: string) => void;
   onRemoveItem: (itemId: string) => void;
+  onEditItem: (itemId: string, fields: Partial<Pick<GoalItemView, "statement" | "kind" | "topic">>) => void;
 }) {
   const nameRef = useRef<HTMLInputElement>(null);
   const topics = useMemo(() => {
@@ -300,21 +313,12 @@ function GoalCard({
                     </div>
                     <ul className="mt-1.5 flex flex-col gap-1.5">
                       {topicItems.map((it) => (
-                        <li key={it.id} className="group flex items-start gap-2 text-sm leading-snug">
-                          <span className="mt-0.5 shrink-0 rounded bg-ink/5 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-ink/40 dark:bg-ink-dark/10 dark:text-ink-dark/40">
-                            {it.kind}
-                          </span>
-                          <span className="min-w-0 flex-1 text-ink/70 dark:text-ink-dark/70">
-                            <MathText text={it.statement} />
-                          </span>
-                          <button
-                            onClick={() => onRemoveItem(it.id)}
-                            title="Remove from this category"
-                            className="text-ink/25 transition-colors hover:text-red-400 group-hover:text-ink/50 dark:text-ink-dark/25 sm:opacity-0 sm:group-hover:opacity-100"
-                          >
-                            <X size={13} />
-                          </button>
-                        </li>
+                        <ItemRow
+                          key={it.id}
+                          item={it}
+                          onEdit={(fields) => onEditItem(it.id, fields)}
+                          onRemove={() => onRemoveItem(it.id)}
+                        />
                       ))}
                     </ul>
                   </div>
@@ -325,5 +329,98 @@ function GoalCard({
         )}
       </AnimatePresence>
     </motion.div>
+  );
+}
+
+function ItemRow({
+  item,
+  onEdit,
+  onRemove,
+}: {
+  item: GoalItemView;
+  onEdit: (fields: Partial<Pick<GoalItemView, "statement" | "kind" | "topic">>) => void;
+  onRemove: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(item.statement);
+  const [draftKind, setDraftKind] = useState<Kind>(item.kind);
+  const [draftTopic, setDraftTopic] = useState(item.topic ?? "");
+
+  const save = () => {
+    const fields: Partial<Pick<GoalItemView, "statement" | "kind" | "topic">> = {};
+    if (draft.trim() && draft.trim() !== item.statement) fields.statement = draft.trim();
+    if (draftKind !== item.kind) fields.kind = draftKind;
+    if (draftTopic.trim() !== (item.topic ?? "")) fields.topic = draftTopic.trim();
+    if (Object.keys(fields).length > 0) onEdit(fields);
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <li className="flex flex-col gap-2 rounded-lg border border-accent/30 bg-accent/5 p-2 text-sm">
+        <textarea
+          autoFocus
+          value={draft}
+          rows={Math.max(2, Math.ceil(draft.length / 60))}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setEditing(false);
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) save();
+          }}
+          className="w-full resize-none rounded bg-white/60 px-2 py-1 leading-snug outline-none focus:ring-1 focus:ring-accent/40 dark:bg-white/[0.06]"
+        />
+        <div className="flex items-center gap-2">
+          <select
+            value={draftKind}
+            onChange={(e) => setDraftKind(e.target.value as Kind)}
+            className="rounded border-0 bg-ink/5 px-1.5 py-1 text-xs text-ink/60 outline-none dark:bg-ink-dark/10 dark:text-ink-dark/60"
+          >
+            {KINDS.map((k) => (
+              <option key={k} value={k}>{k}</option>
+            ))}
+          </select>
+          <input
+            value={draftTopic}
+            placeholder="topic"
+            onChange={(e) => setDraftTopic(e.target.value)}
+            className="w-28 rounded bg-accent/10 px-1.5 py-1 text-xs text-accent outline-none placeholder:text-accent/40"
+          />
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={save}
+              className="rounded-full bg-accent px-2.5 py-0.5 text-xs font-medium text-white hover:bg-accent/80"
+            >
+              Save
+            </button>
+            <QuietButton onClick={() => setEditing(false)}>cancel</QuietButton>
+          </div>
+        </div>
+      </li>
+    );
+  }
+
+  return (
+    <li className="group flex items-start gap-2 text-sm leading-snug">
+      <span className="mt-0.5 shrink-0 rounded bg-ink/5 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-ink/40 dark:bg-ink-dark/10 dark:text-ink-dark/40">
+        {item.kind}
+      </span>
+      <span className="min-w-0 flex-1 text-ink/70 dark:text-ink-dark/70">
+        <MathText text={item.statement} />
+      </span>
+      <button
+        onClick={() => { setDraft(item.statement); setDraftKind(item.kind); setDraftTopic(item.topic ?? ""); setEditing(true); }}
+        title="Edit item"
+        className="text-ink/25 transition-colors hover:text-accent dark:text-ink-dark/25 sm:opacity-0 sm:group-hover:opacity-100"
+      >
+        <Pencil size={13} />
+      </button>
+      <button
+        onClick={onRemove}
+        title="Remove from this category"
+        className="text-ink/25 transition-colors hover:text-red-400 dark:text-ink-dark/25 sm:opacity-0 sm:group-hover:opacity-100"
+      >
+        <X size={13} />
+      </button>
+    </li>
   );
 }
