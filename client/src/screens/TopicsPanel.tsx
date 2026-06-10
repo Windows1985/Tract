@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { CalendarDays, ChevronDown, Plus, Trash2, X } from "lucide-react";
+import { CalendarDays, ChevronDown, Pencil, Trash2, X } from "lucide-react";
 import { del, get, patch, post, type GoalItemView, type GoalView } from "../api";
 import { fade, staggerOption } from "../motion";
 import { MathText } from "../components/Katex";
-import { MemoryBar, PrimaryButton, QuietButton } from "../components/widgets";
+import { MemoryBar, QuietButton } from "../components/widgets";
 
 // Category & topic management. Categories are goals; topics are the AI's
 // subtopic labels on items (e.g. Chemistry → Redox, Electrolysis). Removing
@@ -15,8 +15,6 @@ export function TopicsPanel({ onClose, onChanged }: { onClose: () => void; onCha
   const [goals, setGoals] = useState<GoalView[]>([]);
   const [open, setOpen] = useState<string | null>(null);
   const [items, setItems] = useState<Record<string, GoalItemView[]>>({});
-  const [newName, setNewName] = useState("");
-  const [newDate, setNewDate] = useState("");
   const [confirming, setConfirming] = useState<string | null>(null); // goal id or `${goalId}::${topic}`
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -41,15 +39,6 @@ export function TopicsPanel({ onClose, onChanged }: { onClose: () => void; onCha
     }
     await loadItems(id);
     setOpen(id);
-  };
-
-  const addGoal = async () => {
-    if (!newName.trim()) return;
-    await post("/api/goals", { name: newName.trim(), targetDate: newDate || null });
-    setNewName("");
-    setNewDate("");
-    await refresh();
-    onChanged();
   };
 
   const rename = async (id: string, name: string) => {
@@ -115,14 +104,17 @@ export function TopicsPanel({ onClose, onChanged }: { onClose: () => void; onCha
             <X size={18} />
           </button>
         </div>
-        <p className="mt-2 text-sm text-ink/50 dark:text-ink-dark/50">
-          Each category holds the topics found in your material. Removing a topic or category archives its
-          items (restorable from the item browser in settings).
+        <p className="mt-2 text-sm leading-relaxed text-ink/50 dark:text-ink-dark/50">
+          Each category holds the topics found in your material. Click a name or date to edit it. Removing a
+          topic or category archives its items (restorable from the item browser in settings). New categories
+          are created when you add material.
         </p>
 
         <div className="mt-8 flex flex-col gap-3">
           {goals.length === 0 && (
-            <p className="text-sm text-ink/40 dark:text-ink-dark/40">No categories yet — add one below.</p>
+            <p className="text-sm text-ink/40 dark:text-ink-dark/40">
+              No categories yet — they're created when you add material from Home.
+            </p>
           )}
           <AnimatePresence initial={false}>
             {goals.map((g, gi) => (
@@ -144,25 +136,6 @@ export function TopicsPanel({ onClose, onChanged }: { onClose: () => void; onCha
               />
             ))}
           </AnimatePresence>
-        </div>
-
-        <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
-          <input
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && addGoal()}
-            placeholder="New category, e.g. Chemistry"
-            className="min-w-0 flex-1 rounded-xl border border-ink/15 bg-white/40 px-4 py-2.5 outline-none transition-colors focus:border-accent dark:border-ink-dark/20 dark:bg-white/[0.03]"
-          />
-          <input
-            type="date"
-            value={newDate}
-            onChange={(e) => setNewDate(e.target.value)}
-            className="rounded-xl border border-ink/15 bg-white/40 px-4 py-2.5 outline-none focus:border-accent dark:border-ink-dark/20 dark:bg-white/[0.03]"
-          />
-          <PrimaryButton onClick={addGoal} disabled={!newName.trim()} className="px-5 py-2.5 text-sm">
-            <Plus size={15} /> Add
-          </PrimaryButton>
         </div>
       </div>
     </motion.div>
@@ -198,6 +171,7 @@ function GoalCard({
   onRemoveTopic: (topic: string) => void;
   onRemoveItem: (itemId: string) => void;
 }) {
+  const nameRef = useRef<HTMLInputElement>(null);
   const topics = useMemo(() => {
     const groups = new Map<string, GoalItemView[]>();
     for (const it of items) {
@@ -214,19 +188,35 @@ function GoalCard({
       layout
       className="overflow-hidden rounded-2xl border border-ink/10 bg-white/40 p-4 shadow-card dark:border-ink-dark/15 dark:bg-white/[0.03]"
     >
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <input
-          defaultValue={g.name}
-          onBlur={(e) => e.target.value !== g.name && onRename(e.target.value)}
-          className="min-w-[8rem] flex-1 bg-transparent font-display text-lg font-medium outline-none"
-        />
-        <label className="flex items-center gap-1.5 text-sm text-ink/45 dark:text-ink-dark/45">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
+        <span className="group/name flex min-w-[10rem] flex-1 items-center gap-1.5">
+          <input
+            ref={nameRef}
+            defaultValue={g.name}
+            onBlur={(e) => e.target.value !== g.name && onRename(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+            aria-label="Category name"
+            className="-mx-2 min-w-0 flex-1 rounded-lg bg-transparent px-2 py-1 font-display text-lg font-medium outline-none transition-colors hover:bg-ink/[0.04] focus:bg-ink/[0.04] focus:ring-2 focus:ring-accent/30 dark:hover:bg-ink-dark/[0.06] dark:focus:bg-ink-dark/[0.06]"
+          />
+          <button
+            onClick={() => nameRef.current?.focus()}
+            aria-label={`rename ${g.name}`}
+            className="shrink-0 rounded-full p-1 text-ink/25 transition-colors hover:bg-ink/5 hover:text-ink/60 group-focus-within/name:text-accent dark:text-ink-dark/25 dark:hover:bg-ink-dark/10 dark:hover:text-ink-dark/60"
+          >
+            <Pencil size={13} />
+          </button>
+        </span>
+        <label
+          title="Target date"
+          className="flex cursor-pointer items-center gap-1.5 rounded-lg px-2 py-1 text-sm text-ink/45 transition-colors hover:bg-ink/[0.04] focus-within:bg-ink/[0.04] focus-within:ring-2 focus-within:ring-accent/30 dark:text-ink-dark/45 dark:hover:bg-ink-dark/[0.06]"
+        >
           <CalendarDays size={14} className="shrink-0" />
           <input
             type="date"
             defaultValue={g.targetDate?.slice(0, 10) ?? ""}
             onChange={(e) => onRedate(e.target.value)}
-            className="w-[8.5rem] bg-transparent outline-none"
+            aria-label="Target date"
+            className="w-[8.5rem] cursor-pointer bg-transparent outline-none"
           />
         </label>
         {confirming === g.id ? (

@@ -265,7 +265,7 @@ export function IngestScreen({
                         onChange={(e) =>
                           setDrafts((ds) => ds.map((x, j) => (j === i ? { ...x, kind: e.target.value as Kind } : x)))
                         }
-                        className="rounded-md border-0 bg-ink/5 px-1.5 py-1 text-xs text-ink/60 outline-none dark:bg-ink-dark/10 dark:text-ink-dark/60"
+                        className="w-24 rounded-md border-0 bg-ink/5 px-1.5 py-1 text-xs text-ink/60 outline-none dark:bg-ink-dark/10 dark:text-ink-dark/60"
                       >
                         {KINDS.map((k) => (
                           <option key={k} value={k}>
@@ -279,7 +279,7 @@ export function IngestScreen({
                         onChange={(e) =>
                           setDrafts((ds) => ds.map((x, j) => (j === i ? { ...x, topic: e.target.value } : x)))
                         }
-                        className="w-20 rounded-md bg-accent/10 px-1.5 py-1 text-xs text-accent outline-none placeholder:text-accent/40"
+                        className="w-24 rounded-md bg-accent/10 px-1.5 py-1 text-xs text-accent outline-none placeholder:text-accent/40"
                       />
                     </span>
                     <textarea
