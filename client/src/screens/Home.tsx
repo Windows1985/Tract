@@ -14,21 +14,24 @@ export function Home({
   onStart,
   onAddMaterial,
   onOpenSettings,
+  onManageTopics,
 }: {
   home: HomeView;
   demoMode: boolean;
   onStart: () => void;
   onAddMaterial: () => void;
   onOpenSettings: () => void;
+  onManageTopics: () => void;
 }) {
   const [today] = useState(() =>
     new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })
   );
+  const [resumable] = useState(() => localStorage.getItem("tract.activeSession") !== null);
 
   return (
     <motion.div {...fade} className="mx-auto flex min-h-screen w-full max-w-2xl flex-col px-6 py-16">
       <div className="flex items-baseline justify-between">
-        <span className="font-display text-lg italic text-ink/60 dark:text-ink-dark/60">Tract</span>
+        <span className="font-display text-lg font-semibold tracking-tight text-ink/70 dark:text-ink-dark/60">Tract</span>
         <p className="text-sm text-ink/40 dark:text-ink-dark/40">{today}</p>
       </div>
 
@@ -36,8 +39,13 @@ export function Home({
         <p className="font-display text-3xl text-ink/80 dark:text-ink-dark/80">
           Today: ~{Math.max(1, home.estimatedMinutes)} min
         </p>
+        {home.dueCount > 0 && (
+          <p className="mt-1.5 text-sm text-ink/40 dark:text-ink-dark/40">
+            {home.dueCount} probe{home.dueCount === 1 ? "" : "s"} waiting
+          </p>
+        )}
         <PrimaryButton onClick={onStart} className="mt-8 px-16 py-4 text-lg">
-          Start
+          {resumable ? "Resume" : "Start"}
         </PrimaryButton>
         {demoMode && <p className="mt-4 text-xs uppercase tracking-[0.25em] text-amber-500/80">demo mode</p>}
       </div>
@@ -58,8 +66,9 @@ export function Home({
         ))}
       </div>
 
-      <div className="mt-14">
+      <div className="mt-14 flex items-center gap-6">
         <QuietButton onClick={onAddMaterial}>+ Add material</QuietButton>
+        <QuietButton onClick={onManageTopics}>manage topics</QuietButton>
       </div>
 
       <footer className="mt-auto flex justify-end pt-16">

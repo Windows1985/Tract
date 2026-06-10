@@ -24,7 +24,7 @@ import { sweepDiffPrompt } from "../prompts/sweepDiff.js";
 import { gradingPrompt } from "../prompts/grading.js";
 import { correctivePrompt } from "../prompts/corrective.js";
 
-const MODEL = "claude-sonnet-4-5";
+const MODEL = "claude-haiku-4-5-20251001";
 
 type ImageMediaType = "image/jpeg" | "image/png" | "image/gif" | "image/webp";
 type ContentBlock =
@@ -100,13 +100,17 @@ export class AnthropicBackend implements AIBackend {
     throw new AIError("The AI returned an unusable response twice. Please try again.");
   }
 
-  async extract(material: string, imageBase64: string | null, imageMediaType: string | null) {
-    const mediaType = IMAGE_TYPES.includes(imageMediaType as ImageMediaType)
-      ? (imageMediaType as ImageMediaType)
-      : "image/png";
-    const extra: ContentBlock[] = imageBase64
-      ? [{ type: "image", source: { type: "base64", media_type: mediaType, data: imageBase64 } }]
-      : [];
+  async extract(material: string, images: { data: string; mediaType: string }[]) {
+    const extra: ContentBlock[] = images.map((img) => ({
+      type: "image",
+      source: {
+        type: "base64",
+        media_type: IMAGE_TYPES.includes(img.mediaType as ImageMediaType)
+          ? (img.mediaType as ImageMediaType)
+          : "image/png",
+        data: img.data,
+      },
+    }));
     return this.completeJSON(ExtractionResultSchema, ingestionPrompt(material, extra.length > 0), 8000, extra);
   }
 

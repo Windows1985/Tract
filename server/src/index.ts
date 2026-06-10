@@ -7,6 +7,7 @@ import { settingsRouter } from "./routes/settings.js";
 import { ingestRouter } from "./routes/ingest.js";
 import { sessionRouter } from "./routes/session.js";
 import { homeRouter } from "./routes/home.js";
+import { goalsRouter } from "./routes/goals.js";
 import { itemsRouter } from "./routes/items.js";
 import { transferRouter } from "./routes/transfer.js";
 import { hasKey } from "./ai/index.js";
@@ -28,6 +29,7 @@ app.use("/api/settings", settingsRouter);
 app.use("/api/ingest", ingestRouter);
 app.use("/api/session", sessionRouter);
 app.use("/api/home", homeRouter);
+app.use("/api/goals", goalsRouter);
 app.use("/api/items", itemsRouter);
 app.use("/api", transferRouter);
 

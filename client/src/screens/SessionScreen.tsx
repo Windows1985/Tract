@@ -26,6 +26,7 @@ import {
 type Phase = "starting" | "sweep" | "sweepResult" | "probe" | "calibration" | "end" | "empty";
 
 const SWEEP_SECONDS = 90;
+const ACTIVE_SESSION_KEY = "tract.activeSession";
 
 export function SessionScreen({ onExit }: { onExit: () => void }) {
   const [phase, setPhase] = useState<Phase>("starting");
@@ -40,11 +41,32 @@ export function SessionScreen({ onExit }: { onExit: () => void }) {
   useEffect(() => {
     (async () => {
       try {
+        // Resume a session left mid-way: the answered prefix is already in
+        // the evidence log, so we pick up exactly where the learner exited.
+        const savedId = localStorage.getItem(ACTIVE_SESSION_KEY);
+        if (savedId) {
+          try {
+            const st = await get<SessionStart & { sweepDone: boolean; nextIndex: number }>(
+              `/api/session/${savedId}/state`
+            );
+            if (st.nextIndex < st.queueLength || (st.sweep && !st.sweepDone)) {
+              setSession(st);
+              setIndex(st.nextIndex);
+              setPhase(st.sweep && !st.sweepDone ? "sweep" : "probe");
+              return;
+            }
+          } catch {
+            localStorage.removeItem(ACTIVE_SESSION_KEY); // session expired — start fresh
+          }
+        }
         const s = await post<SessionStart>("/api/session/start");
         setSession(s);
+        localStorage.setItem(ACTIVE_SESSION_KEY, s.sessionId);
         if (s.sweep) setPhase("sweep");
-        else if (s.queueLength === 0) setPhase("empty");
-        else setPhase("probe");
+        else if (s.queueLength === 0) {
+          localStorage.removeItem(ACTIVE_SESSION_KEY);
+          setPhase("empty");
+        } else setPhase("probe");
       } catch (e) {
         setError(e instanceof Error ? e.message : "Could not start.");
       }
@@ -58,6 +80,7 @@ export function SessionScreen({ onExit }: { onExit: () => void }) {
       try {
         const p = await get<ProbeView>(`/api/session/${session.sessionId}/probe/${i}`);
         if ((p as any).done) {
+          localStorage.removeItem(ACTIVE_SESSION_KEY); // queue exhausted — nothing left to resume
           setPhase(calibrated ? "end" : "calibration");
           if (calibrated) {
             const f = await post<FinishView>(`/api/session/${session.sessionId}/finish`);
@@ -90,7 +113,10 @@ export function SessionScreen({ onExit }: { onExit: () => void }) {
   const extend = async () => {
     if (!session) return;
     const r = await post<{ added: number }>(`/api/session/${session.sessionId}/extend`);
-    if (r.added > 0) setPhase("probe");
+    if (r.added > 0) {
+      localStorage.setItem(ACTIVE_SESSION_KEY, session.sessionId);
+      setPhase("probe");
+    }
   };
 
   // Esc ends the session from the probe flow — everything answered so far
@@ -268,7 +294,7 @@ function SweepView({
     <motion.div {...fade} className="flex flex-1 flex-col justify-center py-12">
       <div className="flex items-center justify-between">
         <p className="font-display text-[28px] leading-snug">
-          Write everything you know about <em className="text-accent">{goalName}</em>.
+          Write everything you know about <span className="font-semibold text-accent">{goalName}</span>.
         </p>
         <div className="relative ml-6 shrink-0">
           <TimerRing seconds={seconds} total={SWEEP_SECONDS} />
