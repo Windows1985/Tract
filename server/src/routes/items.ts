@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { getDb } from "../db.js";
+import { KindSchema } from "../types.js";
 
 // Plain searchable item list with archive — lives behind the gear, for
 // corrections only. Not on the home path.
@@ -27,11 +28,21 @@ itemsRouter.post("/:id/archive", (req, res) => {
   res.json({ ok: true });
 });
 
-const EditBody = z.object({ statement: z.string().min(3) });
+const EditBody = z.object({
+  statement: z.string().min(3).optional(),
+  kind: KindSchema.optional(),
+  topic: z.string().optional(),
+});
 
 itemsRouter.patch("/:id", (req, res) => {
   const parse = EditBody.safeParse(req.body);
-  if (!parse.success) return res.status(400).json({ error: "Invalid statement." });
-  getDb().prepare("UPDATE items SET statement = ? WHERE id = ?").run(parse.data.statement, req.params.id);
+  if (!parse.success) return res.status(400).json({ error: "Invalid fields." });
+  const db = getDb();
+  if (parse.data.statement !== undefined)
+    db.prepare("UPDATE items SET statement = ? WHERE id = ?").run(parse.data.statement, req.params.id);
+  if (parse.data.kind !== undefined)
+    db.prepare("UPDATE items SET kind = ? WHERE id = ?").run(parse.data.kind, req.params.id);
+  if (parse.data.topic !== undefined)
+    db.prepare("UPDATE items SET topic = ? WHERE id = ?").run(parse.data.topic, req.params.id);
   res.json({ ok: true });
 });

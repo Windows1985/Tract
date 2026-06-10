@@ -225,6 +225,7 @@ export function SessionScreen({ onExit }: { onExit: () => void }) {
             sessionId={session!.sessionId}
             probe={probe}
             onAdvance={advance}
+            onQueueLen={(n) => setProbe((p) => (p && n > p.total ? { ...p, total: n } : p))}
           />
         )}
 
@@ -328,10 +329,12 @@ function ProbeRunner({
   sessionId,
   probe,
   onAdvance,
+  onQueueLen,
 }: {
   sessionId: string;
   probe: ProbeView | null;
   onAdvance: () => void;
+  onQueueLen: (n: number) => void;
 }) {
   if (!probe)
     return (
@@ -345,10 +348,10 @@ function ProbeRunner({
         {probe.index + 1} / {probe.total}
         {probe.isRetry && <span className="ml-2 rounded-full bg-accent/10 px-2 py-0.5 text-accent">again</span>}
       </p>
-      {probe.modality === "mcq" && <McqProbe key={probe.index} sessionId={sessionId} probe={probe} onAdvance={onAdvance} />}
-      {probe.modality === "cued" && <CuedProbe key={probe.index} sessionId={sessionId} probe={probe} onAdvance={onAdvance} />}
+      {probe.modality === "mcq" && <McqProbe key={probe.index} sessionId={sessionId} probe={probe} onAdvance={onAdvance} onQueueLen={onQueueLen} />}
+      {probe.modality === "cued" && <CuedProbe key={probe.index} sessionId={sessionId} probe={probe} onAdvance={onAdvance} onQueueLen={onQueueLen} />}
       {(probe.modality === "typed" || probe.modality === "explain") && (
-        <TypedProbe key={probe.index} sessionId={sessionId} probe={probe} onAdvance={onAdvance} />
+        <TypedProbe key={probe.index} sessionId={sessionId} probe={probe} onAdvance={onAdvance} onQueueLen={onQueueLen} />
       )}
     </motion.div>
   );
@@ -405,7 +408,7 @@ function useKey(key: string, fn: (() => void) | null) {
   }, [key, fn]);
 }
 
-function McqProbe({ sessionId, probe, onAdvance }: { sessionId: string; probe: ProbeView; onAdvance: () => void }) {
+function McqProbe({ sessionId, probe, onAdvance, onQueueLen }: { sessionId: string; probe: ProbeView; onAdvance: () => void; onQueueLen: (n: number) => void }) {
   const [picked, setPicked] = useState<number | null>(null);
   const [result, setResult] = useState<AnswerResult | null>(null);
   const [showCorrect, setShowCorrect] = useState(false);
@@ -421,6 +424,7 @@ function McqProbe({ sessionId, probe, onAdvance }: { sessionId: string; probe: P
       optionIndex: i,
     });
     setResult(r);
+    onQueueLen(r.queueLength);
     if (r.outcome === "pass") setTimeout(() => setShowCorrect(true), 500);
   };
 
@@ -490,7 +494,7 @@ function McqProbe({ sessionId, probe, onAdvance }: { sessionId: string; probe: P
   );
 }
 
-function CuedProbe({ sessionId, probe, onAdvance }: { sessionId: string; probe: ProbeView; onAdvance: () => void }) {
+function CuedProbe({ sessionId, probe, onAdvance, onQueueLen }: { sessionId: string; probe: ProbeView; onAdvance: () => void; onQueueLen: (n: number) => void }) {
   const [revealed, setRevealed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<AnswerResult | null>(null);
@@ -506,6 +510,7 @@ function CuedProbe({ sessionId, probe, onAdvance }: { sessionId: string; probe: 
     });
     setResult(r);
     setBusy(false);
+    onQueueLen(r.queueLength);
     if (selfRating !== "fail") onAdvance();
   };
 
@@ -561,7 +566,7 @@ function CuedProbe({ sessionId, probe, onAdvance }: { sessionId: string; probe: 
   );
 }
 
-function TypedProbe({ sessionId, probe, onAdvance }: { sessionId: string; probe: ProbeView; onAdvance: () => void }) {
+function TypedProbe({ sessionId, probe, onAdvance, onQueueLen }: { sessionId: string; probe: ProbeView; onAdvance: () => void; onQueueLen: (n: number) => void }) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<AnswerResult | null>(null);
@@ -577,6 +582,7 @@ function TypedProbe({ sessionId, probe, onAdvance }: { sessionId: string; probe:
     });
     setResult(r);
     setBusy(false);
+    onQueueLen(r.queueLength);
   };
 
   return (
