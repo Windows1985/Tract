@@ -13,7 +13,7 @@ import type {
 // mock implementation (MockBackend) powers demo mode and the test suite.
 
 export interface AIBackend {
-  extract(material: string, imageBase64: string | null, imageMediaType: string | null): Promise<ExtractionResult>;
+  extract(material: string, images: { data: string; mediaType: string }[]): Promise<ExtractionResult>;
   distractors(statement: string, kind: string): Promise<string[]>;
   dedupe(candidates: string[], existing: string[]): Promise<DedupeResult>;
   probe(

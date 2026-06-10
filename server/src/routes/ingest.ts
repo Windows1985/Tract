@@ -9,19 +9,23 @@ import { saveState } from "../memory/store.js";
 
 export const ingestRouter = Router();
 
+const ImageSchema = z.object({ data: z.string(), mediaType: z.string() });
 const ExtractBody = z.object({
   text: z.string().default(""),
-  image: z.object({ data: z.string(), mediaType: z.string() }).nullable().optional(),
+  image: ImageSchema.nullable().optional(), // legacy single-image shape
+  images: z.array(ImageSchema).max(8).optional(),
 });
 
 ingestRouter.post("/extract", async (req, res) => {
   const parse = ExtractBody.safeParse(req.body);
   if (!parse.success) return res.status(400).json({ error: "Invalid request." });
-  const { text, image } = parse.data;
-  if (!text.trim() && !image) return res.status(400).json({ error: "Paste some material first." });
+  const { text, image, images } = parse.data;
+  const allImages = [...(images ?? []), ...(image ? [image] : [])];
+  if (!text.trim() && allImages.length === 0)
+    return res.status(400).json({ error: "Paste some material first." });
   try {
     const ai = getAI();
-    const extraction = await ai.extract(text, image?.data ?? null, image?.mediaType ?? null);
+    const extraction = await ai.extract(text, allImages);
 
     // Re-ingesting overlapping material must dedupe: compare candidates to
     // existing item statements and skip duplicates before they're shown.

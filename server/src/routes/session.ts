@@ -35,6 +35,25 @@ sessionRouter.post("/start", (_req, res) => {
   }
 });
 
+// Resume a session left mid-way (e.g. the learner exited the quiz). The
+// answered prefix lives in the evidence log; the session object survives in
+// memory for 6h. 404 means "start fresh".
+sessionRouter.get("/:id/state", (req, res) => {
+  try {
+    const s = getSession(req.params.id);
+    res.json({
+      sessionId: s.id,
+      minutes: s.plan.minutes,
+      queueLength: s.plan.queue.length,
+      sweep: s.plan.sweep ? { goalName: s.plan.sweep.goalName, itemCount: s.plan.sweep.itemIds.length } : null,
+      sweepDone: s.sweepDone,
+      nextIndex: s.results.length,
+    });
+  } catch {
+    res.status(404).json({ error: "session_gone" });
+  }
+});
+
 const SweepBody = z.object({ dump: z.string(), durationMs: z.number().int().nonnegative() });
 
 sessionRouter.post("/:id/sweep", async (req, res) => {

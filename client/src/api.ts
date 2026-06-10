@@ -55,6 +55,22 @@ export interface HomeView {
   goals: { id: string; name: string; targetDate: string | null; memory: number; projected: number | null }[];
 }
 
+export const del = <T>(path: string) => request<T>(path, { method: "DELETE" });
+
+export interface GoalView {
+  id: string;
+  name: string;
+  targetDate: string | null;
+  itemCount: number;
+  memory: number;
+}
+
+export interface GoalItemView {
+  id: string;
+  statement: string;
+  kind: Kind;
+}
+
 export interface DraftItem {
   statement: string;
   kind: Kind;

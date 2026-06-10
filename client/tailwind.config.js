@@ -16,7 +16,7 @@ export default {
       },
       fontFamily: {
         sans: ["Inter Variable", "Inter", "ui-sans-serif", "system-ui", "-apple-system", "sans-serif"],
-        display: ["Fraunces Variable", "Fraunces", "Georgia", "serif"],
+        display: ["Space Grotesk Variable", "Space Grotesk", "Inter Variable", "system-ui", "sans-serif"],
       },
       boxShadow: {
         glow: "0 8px 32px -8px rgba(92, 95, 196, 0.45)",

@@ -84,7 +84,7 @@ export function SettingsSheet({
       >
         <div className="mx-auto w-full max-w-2xl px-6 py-16">
           <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-semibold tracking-tight">Settings</h2>
+            <h2 className="font-display text-3xl font-semibold tracking-tight">Settings</h2>
             <QuietButton onClick={onClose}>close</QuietButton>
           </div>
 

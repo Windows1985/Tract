@@ -6,6 +6,7 @@ import { IngestScreen } from "./screens/IngestScreen";
 import { Home } from "./screens/Home";
 import { SessionScreen } from "./screens/SessionScreen";
 import { SettingsSheet } from "./screens/SettingsSheet";
+import { TopicsPanel } from "./screens/TopicsPanel";
 
 type Screen = "loading" | "key" | "firstIngest" | "home" | "ingest" | "session";
 
@@ -14,6 +15,7 @@ export default function App() {
   const [settings, setSettings] = useState<SettingsView | null>(null);
   const [home, setHome] = useState<HomeView | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showTopics, setShowTopics] = useState(false);
 
   const refresh = useCallback(async (goHome = false) => {
     const s = await get<SettingsView>("/api/settings");
@@ -56,11 +58,21 @@ export default function App() {
             onStart={() => setScreen("session")}
             onAddMaterial={() => setScreen("ingest")}
             onOpenSettings={() => setShowSettings(true)}
+            onManageTopics={() => setShowTopics(true)}
           />
           {showSettings && (
             <SettingsSheet
               settings={settings}
               onClose={() => setShowSettings(false)}
+              onChanged={() => refresh()}
+            />
+          )}
+          {showTopics && (
+            <TopicsPanel
+              onClose={() => {
+                setShowTopics(false);
+                refresh();
+              }}
               onChanged={() => refresh()}
             />
           )}
