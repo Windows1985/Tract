@@ -376,6 +376,21 @@ function Corrective({ text, onAck }: { text: string; onAck: () => void }) {
   );
 }
 
+function CorrectFlash({ onDone }: { onDone: () => void }) {
+  useEffect(() => {
+    const t = setTimeout(onDone, 700);
+    return () => clearTimeout(t);
+  }, [onDone]);
+  return (
+    <motion.p
+      {...reveal}
+      className="mt-6 text-sm font-medium uppercase tracking-[0.2em] text-accent"
+    >
+      Answer is correct
+    </motion.p>
+  );
+}
+
 function useKey(key: string, fn: (() => void) | null) {
   useEffect(() => {
     if (!fn) return;
@@ -393,6 +408,7 @@ function useKey(key: string, fn: (() => void) | null) {
 function McqProbe({ sessionId, probe, onAdvance }: { sessionId: string; probe: ProbeView; onAdvance: () => void }) {
   const [picked, setPicked] = useState<number | null>(null);
   const [result, setResult] = useState<AnswerResult | null>(null);
+  const [showCorrect, setShowCorrect] = useState(false);
   const started = useRef(Date.now());
   const options = probe.options ?? [];
 
@@ -405,7 +421,7 @@ function McqProbe({ sessionId, probe, onAdvance }: { sessionId: string; probe: P
       optionIndex: i,
     });
     setResult(r);
-    if (r.outcome === "pass") setTimeout(onAdvance, 650);
+    if (r.outcome === "pass") setTimeout(() => setShowCorrect(true), 500);
   };
 
   // Keyboard 1–4 picks an option.
@@ -468,7 +484,8 @@ function McqProbe({ sessionId, probe, onAdvance }: { sessionId: string; probe: P
           </motion.div>
         )}
       </AnimatePresence>
-      {result?.corrective && <Corrective text={result.corrective} onAck={onAdvance} />}
+      {showCorrect && <CorrectFlash onDone={onAdvance} />}
+      {!showCorrect && result?.corrective && <Corrective text={result.corrective} onAck={onAdvance} />}
     </div>
   );
 }
@@ -590,15 +607,13 @@ function TypedProbe({ sessionId, probe, onAdvance }: { sessionId: string; probe:
             )}
           </div>
         </>
+      ) : result.outcome === "pass" ? (
+        <CorrectFlash onDone={onAdvance} />
       ) : (
         <motion.div {...reveal} className="mt-8">
           <p
             className={`text-sm font-medium uppercase tracking-[0.2em] ${
-              result.outcome === "pass"
-                ? "text-accent"
-                : result.outcome === "partial"
-                  ? "text-amber-500"
-                  : "text-red-400"
+              result.outcome === "partial" ? "text-amber-500" : "text-red-400"
             }`}
           >
             {result.outcome}
