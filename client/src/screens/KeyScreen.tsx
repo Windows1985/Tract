@@ -27,10 +27,20 @@ export function KeyScreen({ onConnected }: { onConnected: (demo: boolean) => voi
   return (
     <motion.div {...fade} className="flex min-h-screen items-center justify-center px-6">
       <div className="w-full max-w-md text-center">
-        <h1 className="text-4xl font-semibold tracking-tight">Tract</h1>
-        <p className="mt-4 text-lg leading-relaxed text-ink/60 dark:text-ink-dark/60">
+        <motion.h1
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0, transition: { duration: 0.4, ease: "easeOut" } }}
+          className="font-display text-5xl italic tracking-tight"
+        >
+          Tract
+        </motion.h1>
+        <motion.p
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0, transition: { duration: 0.4, ease: "easeOut", delay: 0.08 } }}
+          className="mt-5 font-display text-xl leading-relaxed text-ink/60 dark:text-ink-dark/60"
+        >
           A memory partner. Feed it what you're learning; press Start every day.
-        </p>
+        </motion.p>
         <form
           className="mt-10 flex flex-col gap-3"
           onSubmit={(e) => {
@@ -44,7 +54,7 @@ export function KeyScreen({ onConnected }: { onConnected: (demo: boolean) => voi
             onChange={(e) => setKey(e.target.value)}
             placeholder="Anthropic API key (sk-ant-…)"
             autoFocus
-            className="w-full rounded-xl border border-ink/15 bg-transparent px-4 py-3 text-center outline-none transition-colors focus:border-accent dark:border-ink-dark/20"
+            className="w-full rounded-xl border border-ink/15 bg-white/40 px-4 py-3 text-center shadow-card outline-none transition-colors focus:border-accent dark:border-ink-dark/20 dark:bg-white/[0.03]"
           />
           <PrimaryButton disabled={busy || !key.trim()} className="w-full">
             {busy ? "Checking…" : "Connect"}
