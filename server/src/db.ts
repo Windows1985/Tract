@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS items (
   id TEXT PRIMARY KEY,
   statement TEXT NOT NULL,
   kind TEXT NOT NULL CHECK (kind IN ('fact','concept','distinction','procedure')),
+  topic TEXT NOT NULL DEFAULT '',
   source_text TEXT,
   distractors TEXT NOT NULL DEFAULT '[]',
   created_at TEXT NOT NULL,
@@ -80,7 +81,16 @@ export function initDb(file?: string): DB {
   db = new Database(target);
   db.pragma("journal_mode = WAL");
   db.exec(SCHEMA);
+  migrate(db);
   return db;
+}
+
+/** Additive migrations for databases created by earlier versions. */
+function migrate(d: DB) {
+  const cols = (d.pragma("table_info(items)") as { name: string }[]).map((c) => c.name);
+  if (!cols.includes("topic")) {
+    d.exec("ALTER TABLE items ADD COLUMN topic TEXT NOT NULL DEFAULT ''");
+  }
 }
 
 export function getDb(): DB {

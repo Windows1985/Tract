@@ -145,9 +145,9 @@ export function SessionScreen({ onExit }: { onExit: () => void }) {
     phase === "probe" && probe ? probe.index / Math.max(1, probe.total) : phase === "sweep" ? 0 : 1;
 
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-2xl flex-col px-6">
+    <div className="mx-auto flex min-h-screen w-full max-w-2xl flex-col px-4 sm:px-6">
       {showChrome && (
-        <div className="sticky top-0 z-10 -mx-6 flex items-center gap-4 bg-paper/80 px-6 pb-3 pt-5 backdrop-blur-sm dark:bg-paper-dark/80">
+        <div className="sticky top-0 z-10 -mx-4 flex items-center gap-4 bg-paper/80 px-4 pb-3 pt-5 backdrop-blur-sm dark:bg-paper-dark/80 sm:-mx-6 sm:px-6">
           <div className="h-1 flex-1 overflow-hidden rounded-full bg-ink/10 dark:bg-ink-dark/15">
             <motion.div
               className="h-full rounded-full bg-gradient-to-r from-accent-soft to-accent"
@@ -293,7 +293,7 @@ function SweepView({
   return (
     <motion.div {...fade} className="flex flex-1 flex-col justify-center py-12">
       <div className="flex items-center justify-between">
-        <p className="font-display text-[28px] leading-snug">
+        <p className="font-display text-2xl leading-snug sm:text-[28px]">
           Write everything you know about <span className="font-semibold text-accent">{goalName}</span>.
         </p>
         <div className="relative ml-6 shrink-0">
@@ -356,7 +356,7 @@ function ProbeRunner({
 
 function QuestionText({ text }: { text: string }) {
   return (
-    <p className="font-display text-[28px] leading-snug">
+    <p className="font-display text-2xl leading-snug sm:text-[28px]">
       <MathText text={text} />
     </p>
   );
@@ -513,7 +513,7 @@ function CuedProbe({ sessionId, probe, onAdvance }: { sessionId: string; probe: 
             <MathText text={probe.canonical ?? ""} />
           </p>
           {!result && !busy && (
-            <div className="mt-6 flex gap-3">
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
               {(
                 [
                   ["pass", "Knew it", "1"],

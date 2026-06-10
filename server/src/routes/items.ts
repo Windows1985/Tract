@@ -11,7 +11,7 @@ itemsRouter.get("/", (req, res) => {
   const q = typeof req.query.q === "string" ? req.query.q : "";
   const rows = getDb()
     .prepare(
-      `SELECT i.id, i.statement, i.kind, i.archived, i.created_at
+      `SELECT i.id, i.statement, i.kind, i.topic, i.archived, i.created_at
        FROM items i
        WHERE i.statement LIKE ?
        ORDER BY i.created_at DESC

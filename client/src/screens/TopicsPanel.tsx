@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { CalendarDays, ChevronDown, Plus, Trash2, X } from "lucide-react";
 import { del, get, patch, post, type GoalItemView, type GoalView } from "../api";
@@ -6,8 +6,10 @@ import { fade, staggerOption } from "../motion";
 import { MathText } from "../components/Katex";
 import { MemoryBar, PrimaryButton, QuietButton } from "../components/widgets";
 
-// Topic (goal) management: rename, redate, delete, and prune what each topic
-// covers. Deleting a topic never deletes knowledge — items stay in the system.
+// Category & topic management. Categories are goals; topics are the AI's
+// subtopic labels on items (e.g. Chemistry → Redox, Electrolysis). Removing
+// either takes the material out of study (items are archived, not deleted —
+// they can be restored from the item browser behind the gear).
 
 export function TopicsPanel({ onClose, onChanged }: { onClose: () => void; onChanged: () => void }) {
   const [goals, setGoals] = useState<GoalView[]>([]);
@@ -15,7 +17,8 @@ export function TopicsPanel({ onClose, onChanged }: { onClose: () => void; onCha
   const [items, setItems] = useState<Record<string, GoalItemView[]>>({});
   const [newName, setNewName] = useState("");
   const [newDate, setNewDate] = useState("");
-  const [confirming, setConfirming] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState<string | null>(null); // goal id or `${goalId}::${topic}`
+  const [busy, setBusy] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     const r = await get<{ goals: GoalView[] }>("/api/goals");
@@ -26,13 +29,17 @@ export function TopicsPanel({ onClose, onChanged }: { onClose: () => void; onCha
     refresh();
   }, [refresh]);
 
+  const loadItems = useCallback(async (id: string) => {
+    const r = await get<{ items: GoalItemView[] }>(`/api/goals/${id}/items`);
+    setItems((m) => ({ ...m, [id]: r.items }));
+  }, []);
+
   const toggleOpen = async (id: string) => {
     if (open === id) {
       setOpen(null);
       return;
     }
-    const r = await get<{ items: GoalItemView[] }>(`/api/goals/${id}/items`);
-    setItems((m) => ({ ...m, [id]: r.items }));
+    await loadItems(id);
     setOpen(id);
   };
 
@@ -58,12 +65,31 @@ export function TopicsPanel({ onClose, onChanged }: { onClose: () => void; onCha
     onChanged();
   };
 
-  const remove = async (id: string) => {
-    await del(`/api/goals/${id}`);
-    setConfirming(null);
-    setOpen(null);
-    await refresh();
-    onChanged();
+  const removeGoal = async (id: string) => {
+    setBusy(id);
+    try {
+      await del(`/api/goals/${id}`);
+      setGoals((gs) => gs.filter((g) => g.id !== id)); // optimistic — disappears immediately
+      setConfirming(null);
+      if (open === id) setOpen(null);
+      await refresh();
+      onChanged();
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const removeTopic = async (goalId: string, topic: string) => {
+    setBusy(`${goalId}::${topic}`);
+    try {
+      await post(`/api/goals/${goalId}/topics/archive`, { topic });
+      setConfirming(null);
+      await loadItems(goalId);
+      await refresh();
+      onChanged();
+    } finally {
+      setBusy(null);
+    }
   };
 
   const removeItem = async (goalId: string, itemId: string) => {
@@ -78,9 +104,9 @@ export function TopicsPanel({ onClose, onChanged }: { onClose: () => void; onCha
       {...fade}
       className="fixed inset-0 z-10 overflow-y-auto bg-paper/95 backdrop-blur-sm dark:bg-paper-dark/95"
     >
-      <div className="mx-auto w-full max-w-2xl px-6 py-16">
+      <div className="mx-auto w-full max-w-2xl px-4 py-10 sm:px-6 sm:py-16">
         <div className="flex items-center justify-between">
-          <h2 className="font-display text-3xl font-semibold tracking-tight">Topics</h2>
+          <h2 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">Topics</h2>
           <button
             onClick={onClose}
             aria-label="close"
@@ -90,97 +116,32 @@ export function TopicsPanel({ onClose, onChanged }: { onClose: () => void; onCha
           </button>
         </div>
         <p className="mt-2 text-sm text-ink/50 dark:text-ink-dark/50">
-          Rename, set a date, or remove a topic. Removing a topic keeps its items — only the grouping goes.
+          Each category holds the topics found in your material. Removing a topic or category archives its
+          items (restorable from the item browser in settings).
         </p>
 
         <div className="mt-8 flex flex-col gap-3">
+          {goals.length === 0 && (
+            <p className="text-sm text-ink/40 dark:text-ink-dark/40">No categories yet — add one below.</p>
+          )}
           <AnimatePresence initial={false}>
             {goals.map((g, gi) => (
-              <motion.div
+              <GoalCard
                 key={g.id}
-                {...staggerOption(gi)}
-                exit={{ opacity: 0, transition: { duration: 0.15 } }}
-                layout
-                className="rounded-2xl border border-ink/10 bg-white/40 p-4 shadow-card dark:border-ink-dark/15 dark:bg-white/[0.03]"
-              >
-                <div className="flex items-center gap-3">
-                  <input
-                    defaultValue={g.name}
-                    onBlur={(e) => e.target.value !== g.name && rename(g.id, e.target.value)}
-                    className="min-w-0 flex-1 bg-transparent font-display text-lg font-medium outline-none"
-                  />
-                  <label className="flex items-center gap-1.5 text-sm text-ink/45 dark:text-ink-dark/45">
-                    <CalendarDays size={14} />
-                    <input
-                      type="date"
-                      defaultValue={g.targetDate?.slice(0, 10) ?? ""}
-                      onChange={(e) => redate(g.id, e.target.value)}
-                      className="bg-transparent outline-none"
-                    />
-                  </label>
-                  {confirming === g.id ? (
-                    <span className="flex items-center gap-2 text-sm">
-                      <button onClick={() => remove(g.id)} className="text-red-400 hover:text-red-500">
-                        delete
-                      </button>
-                      <QuietButton onClick={() => setConfirming(null)}>keep</QuietButton>
-                    </span>
-                  ) : (
-                    <button
-                      onClick={() => setConfirming(g.id)}
-                      aria-label={`delete topic ${g.name}`}
-                      className="rounded-full p-1.5 text-ink/30 transition-colors hover:bg-red-400/10 hover:text-red-400 dark:text-ink-dark/30"
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                  )}
-                </div>
-                <div className="mt-3 flex items-center gap-3">
-                  <div className="flex-1">
-                    <MemoryBar percent={g.memory} />
-                  </div>
-                  <button
-                    onClick={() => toggleOpen(g.id)}
-                    className="flex items-center gap-1 text-sm text-ink/45 transition-colors hover:text-ink dark:text-ink-dark/45 dark:hover:text-ink-dark"
-                  >
-                    {g.itemCount} item{g.itemCount === 1 ? "" : "s"}
-                    <motion.span animate={{ rotate: open === g.id ? 180 : 0 }} transition={{ duration: 0.18 }}>
-                      <ChevronDown size={14} />
-                    </motion.span>
-                  </button>
-                </div>
-                <AnimatePresence>
-                  {open === g.id && (
-                    <motion.ul
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: "auto", opacity: 1, transition: { duration: 0.2, ease: "easeOut" } }}
-                      exit={{ height: 0, opacity: 0, transition: { duration: 0.15 } }}
-                      className="mt-3 flex flex-col gap-1.5 overflow-hidden border-t border-ink/10 pt-3 dark:border-ink-dark/10"
-                    >
-                      {(items[g.id] ?? []).map((it) => (
-                        <li key={it.id} className="group flex items-start gap-2 text-sm leading-snug">
-                          <span className="mt-0.5 shrink-0 rounded bg-ink/5 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-ink/40 dark:bg-ink-dark/10 dark:text-ink-dark/40">
-                            {it.kind}
-                          </span>
-                          <span className="flex-1 text-ink/70 dark:text-ink-dark/70">
-                            <MathText text={it.statement} />
-                          </span>
-                          <button
-                            onClick={() => removeItem(g.id, it.id)}
-                            title="Remove from this topic"
-                            className="text-ink/25 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100 dark:text-ink-dark/25"
-                          >
-                            <X size={13} />
-                          </button>
-                        </li>
-                      ))}
-                      {(items[g.id] ?? []).length === 0 && (
-                        <li className="text-sm text-ink/40 dark:text-ink-dark/40">No items yet.</li>
-                      )}
-                    </motion.ul>
-                  )}
-                </AnimatePresence>
-              </motion.div>
+                goal={g}
+                index={gi}
+                open={open === g.id}
+                items={items[g.id] ?? []}
+                confirming={confirming}
+                busy={busy}
+                onToggle={() => toggleOpen(g.id)}
+                onRename={(name) => rename(g.id, name)}
+                onRedate={(date) => redate(g.id, date)}
+                onConfirm={setConfirming}
+                onRemoveGoal={() => removeGoal(g.id)}
+                onRemoveTopic={(topic) => removeTopic(g.id, topic)}
+                onRemoveItem={(itemId) => removeItem(g.id, itemId)}
+              />
             ))}
           </AnimatePresence>
         </div>
@@ -190,8 +151,8 @@ export function TopicsPanel({ onClose, onChanged }: { onClose: () => void; onCha
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && addGoal()}
-            placeholder="New topic, e.g. Organic chemistry"
-            className="flex-1 rounded-xl border border-ink/15 bg-white/40 px-4 py-2.5 outline-none transition-colors focus:border-accent dark:border-ink-dark/20 dark:bg-white/[0.03]"
+            placeholder="New category, e.g. Chemistry"
+            className="min-w-0 flex-1 rounded-xl border border-ink/15 bg-white/40 px-4 py-2.5 outline-none transition-colors focus:border-accent dark:border-ink-dark/20 dark:bg-white/[0.03]"
           />
           <input
             type="date"
@@ -200,10 +161,179 @@ export function TopicsPanel({ onClose, onChanged }: { onClose: () => void; onCha
             className="rounded-xl border border-ink/15 bg-white/40 px-4 py-2.5 outline-none focus:border-accent dark:border-ink-dark/20 dark:bg-white/[0.03]"
           />
           <PrimaryButton onClick={addGoal} disabled={!newName.trim()} className="px-5 py-2.5 text-sm">
-            <Plus size={15} /> Add topic
+            <Plus size={15} /> Add
           </PrimaryButton>
         </div>
       </div>
+    </motion.div>
+  );
+}
+
+function GoalCard({
+  goal: g,
+  index,
+  open,
+  items,
+  confirming,
+  busy,
+  onToggle,
+  onRename,
+  onRedate,
+  onConfirm,
+  onRemoveGoal,
+  onRemoveTopic,
+  onRemoveItem,
+}: {
+  goal: GoalView;
+  index: number;
+  open: boolean;
+  items: GoalItemView[];
+  confirming: string | null;
+  busy: string | null;
+  onToggle: () => void;
+  onRename: (name: string) => void;
+  onRedate: (date: string) => void;
+  onConfirm: (key: string | null) => void;
+  onRemoveGoal: () => void;
+  onRemoveTopic: (topic: string) => void;
+  onRemoveItem: (itemId: string) => void;
+}) {
+  const topics = useMemo(() => {
+    const groups = new Map<string, GoalItemView[]>();
+    for (const it of items) {
+      const t = it.topic?.trim() || "General";
+      groups.set(t, [...(groups.get(t) ?? []), it]);
+    }
+    return [...groups.entries()];
+  }, [items]);
+
+  return (
+    <motion.div
+      {...staggerOption(Math.min(index, 8))}
+      exit={{ opacity: 0, height: 0, transition: { duration: 0.2 } }}
+      layout
+      className="overflow-hidden rounded-2xl border border-ink/10 bg-white/40 p-4 shadow-card dark:border-ink-dark/15 dark:bg-white/[0.03]"
+    >
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <input
+          defaultValue={g.name}
+          onBlur={(e) => e.target.value !== g.name && onRename(e.target.value)}
+          className="min-w-[8rem] flex-1 bg-transparent font-display text-lg font-medium outline-none"
+        />
+        <label className="flex items-center gap-1.5 text-sm text-ink/45 dark:text-ink-dark/45">
+          <CalendarDays size={14} className="shrink-0" />
+          <input
+            type="date"
+            defaultValue={g.targetDate?.slice(0, 10) ?? ""}
+            onChange={(e) => onRedate(e.target.value)}
+            className="w-[8.5rem] bg-transparent outline-none"
+          />
+        </label>
+        {confirming === g.id ? (
+          <span className="flex items-center gap-2 text-sm">
+            <button
+              onClick={onRemoveGoal}
+              disabled={busy === g.id}
+              className="rounded-full bg-red-400/10 px-3 py-1 font-medium text-red-400 hover:bg-red-400/20 disabled:opacity-50"
+            >
+              {busy === g.id ? "removing…" : "remove category"}
+            </button>
+            <QuietButton onClick={() => onConfirm(null)}>keep</QuietButton>
+          </span>
+        ) : (
+          <button
+            onClick={() => onConfirm(g.id)}
+            aria-label={`delete category ${g.name}`}
+            className="rounded-full p-1.5 text-ink/30 transition-colors hover:bg-red-400/10 hover:text-red-400 dark:text-ink-dark/30"
+          >
+            <Trash2 size={15} />
+          </button>
+        )}
+      </div>
+
+      <div className="mt-3 flex items-center gap-3">
+        <div className="flex-1">
+          <MemoryBar percent={g.memory} />
+        </div>
+        <button
+          onClick={onToggle}
+          className="flex shrink-0 items-center gap-1 text-sm text-ink/45 transition-colors hover:text-ink dark:text-ink-dark/45 dark:hover:text-ink-dark"
+        >
+          {g.itemCount} item{g.itemCount === 1 ? "" : "s"}
+          <motion.span animate={{ rotate: open ? 180 : 0 }} transition={{ duration: 0.18 }}>
+            <ChevronDown size={14} />
+          </motion.span>
+        </button>
+      </div>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1, transition: { duration: 0.22, ease: "easeOut" } }}
+            exit={{ height: 0, opacity: 0, transition: { duration: 0.15 } }}
+            className="overflow-hidden"
+          >
+            <div className="mt-3 flex flex-col gap-4 border-t border-ink/10 pt-3 dark:border-ink-dark/10">
+              {topics.length === 0 && <p className="text-sm text-ink/40 dark:text-ink-dark/40">No items yet.</p>}
+              {topics.map(([topic, topicItems]) => {
+                const cKey = `${g.id}::${topic}`;
+                return (
+                  <div key={topic}>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-display text-sm font-semibold uppercase tracking-wider text-accent">
+                        {topic}
+                      </span>
+                      <span className="text-xs text-ink/35 dark:text-ink-dark/35">
+                        {topicItems.length} item{topicItems.length === 1 ? "" : "s"}
+                      </span>
+                      {confirming === cKey ? (
+                        <span className="flex items-center gap-2 text-xs">
+                          <button
+                            onClick={() => onRemoveTopic(topic)}
+                            disabled={busy === cKey}
+                            className="rounded-full bg-red-400/10 px-2.5 py-0.5 font-medium text-red-400 hover:bg-red-400/20 disabled:opacity-50"
+                          >
+                            {busy === cKey ? "removing…" : "remove topic"}
+                          </button>
+                          <QuietButton onClick={() => onConfirm(null)}>keep</QuietButton>
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => onConfirm(cKey)}
+                          aria-label={`remove topic ${topic}`}
+                          className="rounded-full p-1 text-ink/25 transition-colors hover:bg-red-400/10 hover:text-red-400 dark:text-ink-dark/25"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </div>
+                    <ul className="mt-1.5 flex flex-col gap-1.5">
+                      {topicItems.map((it) => (
+                        <li key={it.id} className="group flex items-start gap-2 text-sm leading-snug">
+                          <span className="mt-0.5 shrink-0 rounded bg-ink/5 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-ink/40 dark:bg-ink-dark/10 dark:text-ink-dark/40">
+                            {it.kind}
+                          </span>
+                          <span className="min-w-0 flex-1 text-ink/70 dark:text-ink-dark/70">
+                            <MathText text={it.statement} />
+                          </span>
+                          <button
+                            onClick={() => onRemoveItem(it.id)}
+                            title="Remove from this category"
+                            className="text-ink/25 transition-colors hover:text-red-400 group-hover:text-ink/50 dark:text-ink-dark/25 sm:opacity-0 sm:group-hover:opacity-100"
+                          >
+                            <X size={13} />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

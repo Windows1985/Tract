@@ -126,7 +126,7 @@ export function IngestScreen({
   };
 
   return (
-    <div className="mx-auto min-h-screen w-full max-w-2xl px-6 py-16">
+    <div className="mx-auto min-h-screen w-full max-w-2xl px-4 py-10 sm:px-6 sm:py-16">
       <AnimatePresence mode="wait">
         {phase === "input" && (
           <motion.div key="input" {...fade}>
@@ -259,19 +259,29 @@ export function IngestScreen({
                     {...staggerOption(Math.min(i, 12))}
                     className="group flex items-start gap-3 rounded-xl border border-ink/10 bg-white/40 p-3 shadow-card dark:border-ink-dark/10 dark:bg-white/[0.03]"
                   >
-                    <select
-                      value={d.kind}
-                      onChange={(e) =>
-                        setDrafts((ds) => ds.map((x, j) => (j === i ? { ...x, kind: e.target.value as Kind } : x)))
-                      }
-                      className="mt-0.5 shrink-0 rounded-md border-0 bg-ink/5 px-1.5 py-1 text-xs text-ink/60 outline-none dark:bg-ink-dark/10 dark:text-ink-dark/60"
-                    >
-                      {KINDS.map((k) => (
-                        <option key={k} value={k}>
-                          {k}
-                        </option>
-                      ))}
-                    </select>
+                    <span className="flex shrink-0 flex-col gap-1">
+                      <select
+                        value={d.kind}
+                        onChange={(e) =>
+                          setDrafts((ds) => ds.map((x, j) => (j === i ? { ...x, kind: e.target.value as Kind } : x)))
+                        }
+                        className="rounded-md border-0 bg-ink/5 px-1.5 py-1 text-xs text-ink/60 outline-none dark:bg-ink-dark/10 dark:text-ink-dark/60"
+                      >
+                        {KINDS.map((k) => (
+                          <option key={k} value={k}>
+                            {k}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        value={d.topic ?? ""}
+                        placeholder="topic"
+                        onChange={(e) =>
+                          setDrafts((ds) => ds.map((x, j) => (j === i ? { ...x, topic: e.target.value } : x)))
+                        }
+                        className="w-20 rounded-md bg-accent/10 px-1.5 py-1 text-xs text-accent outline-none placeholder:text-accent/40"
+                      />
+                    </span>
                     <textarea
                       value={d.statement}
                       rows={Math.max(1, Math.ceil(d.statement.length / 70))}
