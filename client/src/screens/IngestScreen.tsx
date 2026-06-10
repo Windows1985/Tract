@@ -88,7 +88,7 @@ export function IngestScreen({
       <AnimatePresence mode="wait">
         {phase === "input" && (
           <motion.div key="input" {...fade}>
-            <h2 className="text-2xl font-semibold tracking-tight">
+            <h2 className="font-display text-3xl tracking-tight">
               {firstRun ? "Feed it something." : "Add material"}
             </h2>
             <p className="mt-2 text-ink/60 dark:text-ink-dark/60">
@@ -145,15 +145,14 @@ export function IngestScreen({
         )}
 
         {phase === "extracting" && (
-          <motion.div key="extracting" {...fade} className="pt-12">
-            <p className="text-ink/60 dark:text-ink-dark/60">Reading your material…</p>
-            <PulsePlaceholder />
+          <motion.div key="extracting" {...fade} className="pt-24">
+            <PulsePlaceholder label="reading your material, finding what's worth remembering" />
           </motion.div>
         )}
 
         {phase === "review" && extract && (
           <motion.div key="review" {...fade}>
-            <h2 className="text-2xl font-semibold tracking-tight">
+            <h2 className="font-display text-3xl tracking-tight">
               {drafts.length - removed.size} item{drafts.length - removed.size === 1 ? "" : "s"} extracted
             </h2>
             <p className="mt-2 text-ink/60 dark:text-ink-dark/60">

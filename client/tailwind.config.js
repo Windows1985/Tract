@@ -5,17 +5,22 @@ export default {
   theme: {
     extend: {
       colors: {
-        paper: "#faf9f6",
-        ink: "#1a1a1f",
-        "paper-dark": "#141417",
-        "ink-dark": "#e8e7e3",
+        paper: "#faf8f4",
+        ink: "#1c1b22",
+        "paper-dark": "#131216",
+        "ink-dark": "#eceae4",
         accent: {
           DEFAULT: "#5c5fc4",
           soft: "#8b8dd6",
         },
       },
       fontFamily: {
-        sans: ["Inter", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Roboto", "sans-serif"],
+        sans: ["Inter Variable", "Inter", "ui-sans-serif", "system-ui", "-apple-system", "sans-serif"],
+        display: ["Fraunces Variable", "Fraunces", "Georgia", "serif"],
+      },
+      boxShadow: {
+        glow: "0 8px 32px -8px rgba(92, 95, 196, 0.45)",
+        card: "0 1px 2px rgba(28,27,34,0.04), 0 8px 24px -12px rgba(28,27,34,0.10)",
       },
     },
   },

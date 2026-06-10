@@ -1,3 +1,5 @@
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/fraunces";
 @import "katex/dist/katex.min.css";
 @tailwind base;
 @tailwind components;
@@ -14,15 +16,54 @@ html {
 
 body {
   @apply font-sans;
+  text-rendering: optimizeLegibility;
+}
+
+/* A whisper of colour at the top of the page — editorial, not decorative. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(900px 420px at 50% -10%, rgba(92, 95, 196, 0.07), transparent 70%),
+    radial-gradient(700px 380px at 85% 110%, rgba(92, 95, 196, 0.04), transparent 70%);
+}
+@media (prefers-color-scheme: dark) {
+  body::before {
+    background:
+      radial-gradient(900px 420px at 50% -10%, rgba(139, 141, 214, 0.09), transparent 70%),
+      radial-gradient(700px 380px at 85% 110%, rgba(139, 141, 214, 0.05), transparent 70%);
+  }
+}
+
+#root {
+  position: relative;
+}
+
+::selection {
+  background: rgba(92, 95, 196, 0.25);
 }
 
 input[type="range"] {
   @apply h-1 w-full cursor-pointer appearance-none rounded-full bg-ink/15 dark:bg-ink-dark/20;
 }
 input[type="range"]::-webkit-slider-thumb {
-  @apply h-5 w-5 appearance-none rounded-full bg-accent;
+  @apply h-5 w-5 appearance-none rounded-full bg-accent shadow-glow;
   -webkit-appearance: none;
 }
 input[type="range"]::-moz-range-thumb {
   @apply h-5 w-5 rounded-full border-0 bg-accent;
+}
+
+textarea,
+input[type="text"],
+input[type="password"],
+input[type="date"] {
+  @apply transition-shadow duration-200;
+}
+textarea:focus-visible,
+input:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(92, 95, 196, 0.18);
 }
