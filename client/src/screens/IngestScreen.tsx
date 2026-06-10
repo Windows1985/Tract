@@ -251,54 +251,58 @@ export function IngestScreen({
               {extract.skippedDuplicates > 0 &&
                 ` ${extract.skippedDuplicates} duplicate(s) of items you already have were skipped.`}
             </p>
-            <ul className="mt-6 flex flex-col gap-2">
+            <ul className="mt-6 grid grid-cols-2 gap-3">
               {drafts.map((d, i) =>
                 removed.has(i) ? null : (
                   <motion.li
                     key={i}
                     {...staggerOption(Math.min(i, 12))}
-                    className="group flex items-start gap-3 rounded-xl border border-ink/10 bg-white/40 p-3 shadow-card dark:border-ink-dark/10 dark:bg-white/[0.03]"
+                    className={`group flex flex-col gap-2 rounded-xl border border-ink/10 bg-white/40 p-4 shadow-card dark:border-ink-dark/10 dark:bg-white/[0.03] ${
+                      d.statement.length > 120 ? "col-span-2" : ""
+                    }`}
                   >
-                    <span className="flex shrink-0 flex-col gap-1">
-                      <select
-                        value={d.kind}
-                        onChange={(e) =>
-                          setDrafts((ds) => ds.map((x, j) => (j === i ? { ...x, kind: e.target.value as Kind } : x)))
-                        }
-                        className="w-24 rounded-md border-0 bg-ink/5 px-1.5 py-1 text-xs text-ink/60 outline-none dark:bg-ink-dark/10 dark:text-ink-dark/60"
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="flex shrink-0 flex-col gap-1">
+                        <select
+                          value={d.kind}
+                          onChange={(e) =>
+                            setDrafts((ds) => ds.map((x, j) => (j === i ? { ...x, kind: e.target.value as Kind } : x)))
+                          }
+                          className="w-24 rounded-md border-0 bg-ink/5 px-1.5 py-1 text-xs text-ink/60 outline-none dark:bg-ink-dark/10 dark:text-ink-dark/60"
+                        >
+                          {KINDS.map((k) => (
+                            <option key={k} value={k}>
+                              {k}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          value={d.topic ?? ""}
+                          placeholder="topic"
+                          onChange={(e) =>
+                            setDrafts((ds) => ds.map((x, j) => (j === i ? { ...x, topic: e.target.value } : x)))
+                          }
+                          className="w-24 rounded-md bg-accent/10 px-1.5 py-1 text-xs text-accent outline-none placeholder:text-accent/40"
+                        />
+                      </span>
+                      <button
+                        onClick={() => setRemoved((r) => new Set(r).add(i))}
+                        className="text-ink/30 opacity-0 transition-opacity hover:text-red-500 group-hover:opacity-100 dark:text-ink-dark/30"
+                        aria-label="remove item"
                       >
-                        {KINDS.map((k) => (
-                          <option key={k} value={k}>
-                            {k}
-                          </option>
-                        ))}
-                      </select>
-                      <input
-                        value={d.topic ?? ""}
-                        placeholder="topic"
-                        onChange={(e) =>
-                          setDrafts((ds) => ds.map((x, j) => (j === i ? { ...x, topic: e.target.value } : x)))
-                        }
-                        className="w-24 rounded-md bg-accent/10 px-1.5 py-1 text-xs text-accent outline-none placeholder:text-accent/40"
-                      />
-                    </span>
+                        <X size={15} />
+                      </button>
+                    </div>
                     <textarea
                       value={d.statement}
-                      rows={Math.max(1, Math.ceil(d.statement.length / 70))}
+                      rows={Math.max(2, Math.ceil(d.statement.length / 55))}
                       onChange={(e) =>
                         setDrafts((ds) =>
                           ds.map((x, j) => (j === i ? { ...x, statement: e.target.value, distractors: [] } : x))
                         )
                       }
-                      className="w-full resize-none bg-transparent leading-relaxed outline-none"
+                      className="w-full resize-none bg-transparent text-sm leading-relaxed outline-none"
                     />
-                    <button
-                      onClick={() => setRemoved((r) => new Set(r).add(i))}
-                      className="text-ink/30 opacity-0 transition-opacity hover:text-red-500 group-hover:opacity-100 dark:text-ink-dark/30"
-                      aria-label="remove item"
-                    >
-                      <X size={15} />
-                    </button>
                   </motion.li>
                 )
               )}
