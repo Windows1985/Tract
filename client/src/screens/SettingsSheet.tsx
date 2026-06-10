@@ -82,7 +82,7 @@ export function SettingsSheet({
         {...fade}
         className="fixed inset-0 z-10 overflow-y-auto bg-paper/95 backdrop-blur-sm dark:bg-paper-dark/95"
       >
-        <div className="mx-auto w-full max-w-2xl px-6 py-16">
+        <div className="mx-auto w-full max-w-2xl px-4 py-10 sm:px-6 sm:py-16">
           <div className="flex items-center justify-between">
             <h2 className="font-display text-3xl font-semibold tracking-tight">Settings</h2>
             <QuietButton onClick={onClose}>close</QuietButton>
@@ -111,7 +111,7 @@ export function SettingsSheet({
             <label className="text-sm text-ink/50 dark:text-ink-dark/50">
               API key {settings.demoMode && <span className="text-amber-500">(currently: demo mode)</span>}
             </label>
-            <div className="mt-2 flex max-w-md gap-2">
+            <div className="mt-2 flex max-w-md flex-col gap-2 sm:flex-row">
               <input
                 type="password"
                 value={newKey}

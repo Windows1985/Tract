@@ -75,6 +75,7 @@ export interface EvidenceEvent {
 export const ExtractedItemSchema = z.object({
   statement: z.string().min(3),
   kind: KindSchema,
+  topic: z.string().default(""), // short subtopic label, e.g. "Redox"
   distractors: z.array(z.string()).length(3),
 });
 

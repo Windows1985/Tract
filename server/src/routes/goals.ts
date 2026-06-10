@@ -58,9 +58,22 @@ goalsRouter.patch("/:id", (req, res) => {
   res.json({ ok: true });
 });
 
+// Removing a category takes its material out of study: items that belong to
+// no other category are archived (never deleted — the evidence log keeps
+// their history, and they can be restored from the item browser).
 goalsRouter.delete("/:id", (req, res) => {
   const db = getDb();
   const tx = db.transaction(() => {
+    db.prepare(
+      `UPDATE items SET archived = 1 WHERE id IN (
+         SELECT gi.item_id FROM goal_items gi
+         WHERE gi.goal_id = ?
+           AND NOT EXISTS (
+             SELECT 1 FROM goal_items other
+             WHERE other.item_id = gi.item_id AND other.goal_id != ?
+           )
+       )`
+    ).run(req.params.id, req.params.id);
     db.prepare("DELETE FROM goal_items WHERE goal_id = ?").run(req.params.id);
     db.prepare("DELETE FROM snapshots WHERE goal_id = ?").run(req.params.id);
     db.prepare("DELETE FROM goals WHERE id = ?").run(req.params.id);
@@ -72,13 +85,36 @@ goalsRouter.delete("/:id", (req, res) => {
 goalsRouter.get("/:id/items", (req, res) => {
   const rows = getDb()
     .prepare(
-      `SELECT i.id, i.statement, i.kind FROM goal_items gi
+      `SELECT i.id, i.statement, i.kind, i.topic FROM goal_items gi
        JOIN items i ON i.id = gi.item_id
        WHERE gi.goal_id = ? AND i.archived = 0
-       ORDER BY i.created_at DESC`
+       ORDER BY i.topic, i.created_at`
     )
     .all(req.params.id);
   res.json({ items: rows });
+});
+
+// Remove one topic (subtopic) inside a category: archives its items, freeing
+// them from scheduling, except items also covered by another category.
+const ArchiveTopicBody = z.object({ topic: z.string() });
+
+goalsRouter.post("/:id/topics/archive", (req, res) => {
+  const parse = ArchiveTopicBody.safeParse(req.body);
+  if (!parse.success) return res.status(400).json({ error: "Invalid topic." });
+  const db = getDb();
+  const result = db
+    .prepare(
+      `UPDATE items SET archived = 1 WHERE topic = ? AND id IN (
+         SELECT gi.item_id FROM goal_items gi
+         WHERE gi.goal_id = ?
+           AND NOT EXISTS (
+             SELECT 1 FROM goal_items other
+             WHERE other.item_id = gi.item_id AND other.goal_id != ?
+           )
+       )`
+    )
+    .run(parse.data.topic, req.params.id, req.params.id);
+  res.json({ ok: true, archived: result.changes });
 });
 
 goalsRouter.delete("/:id/items/:itemId", (req, res) => {

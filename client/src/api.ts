@@ -69,11 +69,13 @@ export interface GoalItemView {
   id: string;
   statement: string;
   kind: Kind;
+  topic: string;
 }
 
 export interface DraftItem {
   statement: string;
   kind: Kind;
+  topic?: string;
   distractors: string[];
 }
 

@@ -29,7 +29,7 @@ export function Home({
   const [resumable] = useState(() => localStorage.getItem("tract.activeSession") !== null);
 
   return (
-    <motion.div {...fade} className="mx-auto flex min-h-screen w-full max-w-2xl flex-col px-6 py-16">
+    <motion.div {...fade} className="mx-auto flex min-h-screen w-full max-w-2xl flex-col px-4 py-10 sm:px-6 sm:py-16">
       <div className="flex items-baseline justify-between">
         <span className="font-display text-lg font-semibold tracking-tight text-ink/70 dark:text-ink-dark/60">Tract</span>
         <p className="text-sm text-ink/40 dark:text-ink-dark/40">{today}</p>

@@ -55,9 +55,11 @@ export class MockBackend implements AIBackend {
           : /\bbecause|means|principle|states that|is when\b/.test(lower)
             ? "concept"
             : "fact";
+      const head = keywords(statement)[0] ?? "general";
       return {
         statement: statement.endsWith(".") ? statement : statement + ".",
         kind,
+        topic: head.charAt(0).toUpperCase() + head.slice(1),
         distractors: makeDistractors(statement),
       };
     });
@@ -76,6 +78,7 @@ export class MockBackend implements AIBackend {
       items.push({
         statement: "This material was too short to extract items from; this is a demo placeholder item.",
         kind: "fact",
+        topic: "General",
         distractors: makeDistractors("demo placeholder"),
       });
     }

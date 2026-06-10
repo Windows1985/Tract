@@ -1,7 +1,8 @@
-import { useMemo } from "react";
+import { Fragment, useMemo } from "react";
 import katex from "katex";
 
-// Renders text with inline $...$ and display $$...$$ KaTeX segments.
+// Renders AI-generated text: inline $...$ / display $$...$$ KaTeX, plus
+// lightweight inline markdown (**bold**, *italic*, `code`) and line breaks.
 export function MathText({ text, className }: { text: string; className?: string }) {
   const parts = useMemo(() => splitMath(text), [text]);
   return (
@@ -18,11 +19,47 @@ export function MathText({ text, className }: { text: string; className?: string
             }}
           />
         ) : (
-          <span key={i}>{p.value}</span>
+          <Fragment key={i}>{renderInlineMarkdown(p.value)}</Fragment>
         )
       )}
     </span>
   );
+}
+
+// --- inline markdown ---------------------------------------------------------
+
+const INLINE_RE = /(\*\*[^*\n]+\*\*|__[^_\n]+__|\*[^*\n]+\*|_[^_\n]+_|`[^`\n]+`)/g;
+
+function renderInlineMarkdown(text: string): React.ReactNode[] {
+  const out: React.ReactNode[] = [];
+  let key = 0;
+  for (const line of text.split("\n")) {
+    if (key > 0) out.push(<br key={`br-${key++}`} />);
+    for (const token of line.split(INLINE_RE)) {
+      if (!token) continue;
+      if ((token.startsWith("**") && token.endsWith("**")) || (token.startsWith("__") && token.endsWith("__"))) {
+        out.push(
+          <strong key={key++} className="font-semibold">
+            {token.slice(2, -2)}
+          </strong>
+        );
+      } else if (
+        (token.startsWith("*") && token.endsWith("*") && token.length > 2) ||
+        (token.startsWith("_") && token.endsWith("_") && token.length > 2)
+      ) {
+        out.push(<em key={key++}>{token.slice(1, -1)}</em>);
+      } else if (token.startsWith("`") && token.endsWith("`") && token.length > 2) {
+        out.push(
+          <code key={key++} className="rounded bg-ink/[0.07] px-1 py-0.5 font-mono text-[0.9em] dark:bg-ink-dark/10">
+            {token.slice(1, -1)}
+          </code>
+        );
+      } else {
+        out.push(<Fragment key={key++}>{token}</Fragment>);
+      }
+    }
+  }
+  return out;
 }
 
 function splitMath(text: string): { value: string; math: boolean; display: boolean }[] {

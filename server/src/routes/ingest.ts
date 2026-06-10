@@ -67,6 +67,7 @@ const CommitBody = z.object({
     z.object({
       statement: z.string().min(3),
       kind: KindSchema,
+      topic: z.string().default(""),
       distractors: z.array(z.string()).optional(),
     })
   ),
@@ -126,7 +127,7 @@ ingestRouter.post("/commit", async (req, res) => {
 
     const ids: string[] = [];
     const insertItem = db.prepare(
-      "INSERT INTO items (id, statement, kind, source_text, distractors, created_at, archived) VALUES (?, ?, ?, ?, ?, ?, 0)"
+      "INSERT INTO items (id, statement, kind, topic, source_text, distractors, created_at, archived) VALUES (?, ?, ?, ?, ?, ?, ?, 0)"
     );
     const insertEdge = db.prepare(
       "INSERT OR IGNORE INTO edges (item_a, item_b, relation, weight) VALUES (?, ?, ?, ?)"
@@ -137,7 +138,15 @@ ingestRouter.post("/commit", async (req, res) => {
       for (const it of withDistractors) {
         const id = uid();
         ids.push(id);
-        insertItem.run(id, it.statement, it.kind, sourceText.slice(0, 4000), JSON.stringify(it.distractors), nowIso());
+        insertItem.run(
+          id,
+          it.statement,
+          it.kind,
+          it.topic ?? "",
+          sourceText.slice(0, 4000),
+          JSON.stringify(it.distractors),
+          nowIso()
+        );
         // New items are immediately probable at the recognition level.
         saveState(memoryModel.initState(id));
         if (goalId) linkGoal.run(goalId, id);

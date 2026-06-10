@@ -58,12 +58,12 @@ export class AnthropicBackend implements AIBackend {
    * with Zod. On a parse/validation failure, retry once with a corrective
    * message; after that, surface a clean user-facing error.
    */
-  private async completeJSON<T>(
-    schema: z.ZodType<T>,
+  private async completeJSON<S extends z.ZodTypeAny>(
+    schema: S,
     prompt: string,
     maxTokens: number,
     extraContent: ContentBlock[] = []
-  ): Promise<T> {
+  ): Promise<z.output<S>> {
     const content: ContentBlock[] = [...extraContent, { type: "text", text: prompt }];
     let lastRaw = "";
     for (let attempt = 0; attempt < 2; attempt++) {
