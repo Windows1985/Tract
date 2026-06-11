@@ -3,7 +3,7 @@ import { getAI } from "../ai/index.js";
 import { logEvent, medianPassDurationMs, recentProbeQuestions } from "../evidence.js";
 import { loadState, loadStates, saveState } from "../memory/store.js";
 import { FsrsMemoryModel } from "../memory/fsrs.js";
-import { outcomeToRating } from "../memory/MemoryModel.js";
+import { outcomeToRating, rescaleRating } from "../memory/MemoryModel.js";
 import { V1Scheduler } from "../scheduler/v1.js";
 import type { Item, Kind, Modality, Outcome, QueueEntry, SessionPlan } from "../types.js";
 import { State } from "ts-fsrs";
@@ -122,10 +122,10 @@ export async function submitSweep(session: Session, dump: string, durationMs: nu
     if (verdict === "mentioned_correct") {
       covered++;
       // One sweep services many items: each correct mention is a pass.
-      // Sweep passes log rating 3, flagged as sweep-sourced in the payload.
+      // Sweep passes log rating 3, then rescaled (free_recall cap = 3).
       const state = loadState(it.id);
       if (state && state.state !== State.New) {
-        saveState(memoryModel.review(state, 3));
+        saveState(memoryModel.review(state, rescaleRating(3, "free_recall", "pass")));
       }
       logEvent({
         item_id: it.id,
@@ -316,7 +316,8 @@ export async function submitAnswer(
   // FSRS update through the MemoryModel.
   const median = medianPassDurationMs();
   const fast = median !== null && durationMs < median;
-  const rating = outcomeToRating(outcome, entry.modality, fast);
+  const rawRating = outcomeToRating(outcome, entry.modality, fast);
+  const rating = rescaleRating(rawRating, entry.modality, outcome);
   const state = loadState(entry.itemId);
   if (state) {
     const updated = memoryModel.review(state, rating);

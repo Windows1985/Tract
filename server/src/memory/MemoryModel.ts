@@ -50,3 +50,30 @@ export function outcomeToRating(
   const deep = modality === "typed" || modality === "explain";
   return deep && fasterThanMedian ? 4 : 3;
 }
+
+/**
+ * Per-modality rescaling applied immediately before a rating enters ts-fsrs.
+ * The raw rating is computed by outcomeToRating; this function adjusts it to
+ * account for the structural difference in evidence quality across modalities:
+ *
+ *  free_recall  pass       → cap at 3 (sweep evidence is less confident than
+ *                             a direct probe; prevents over-crediting)
+ *  typed/explain fail      → 1 (high-bar modality; a miss is strong evidence
+ *                             of forgetting — already the default, made explicit)
+ *  typed/explain pass fast → 4 (pass-through; outcomeToRating already set this)
+ *  mcq/cued any outcome    → pass-through unchanged
+ *
+ * Does NOT change the evidence_events log format — rescaling is at the
+ * ts-fsrs call site only.
+ */
+export function rescaleRating(rawRating: Rating, modality: Modality, outcome: Outcome): Rating {
+  if (modality === "free_recall") {
+    // Sweeps are lower-confidence: cap pass at 3, keep fail/partial as-is.
+    return Math.min(rawRating, 3) as Rating;
+  }
+  if ((modality === "typed" || modality === "explain") && outcome === "fail") {
+    // High-bar modality miss is the strongest forgetting signal.
+    return 1;
+  }
+  return rawRating;
+}
