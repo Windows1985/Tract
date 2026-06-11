@@ -35,6 +35,22 @@ client from the API server at http://localhost:5174).
 - **Calibration close**: guess how you did, see how you actually did.
 - **End screen**: per-goal memory delta, minutes spent, weekly momentum.
 
+## Ingest
+
+Paste notes, paste a URL, or drop an image. Tract segments the material into
+atomic propositions, extracts knowledge items with MCQ distractors, checks for
+duplicates against what you've already loaded, and links related items. The
+process takes a few seconds; you can review and remove items before they enter
+the queue.
+
+## Goals and topics
+
+Goals replace decks. A goal has a name and an optional target date. Items link
+to goals; the scheduler weights the queue toward goals approaching their target
+date, switching to successive-relearning mode (an item must pass in three
+distinct sessions) in the final two weeks. After the date, items relax to
+maintenance.
+
 ## Stack
 
 React 18 + TypeScript + Vite + Tailwind + framer-motion · Node + Express
@@ -52,6 +68,7 @@ npm test
 ```
 
 Covers modality selection, queue building + contrast interleaving,
-goal-conditioned prioritisation, sweep-diff event application, the FSRS
-rating mapping, and a full end-to-end session loop against the mocked AI
+goal-conditioned prioritisation, FSRS rating rescaling per modality,
+sweep-diff event application, error taxonomy classification, note
+segmentation, and a full end-to-end session loop against the mocked AI
 layer (ingest → sweep → all modalities → fail loop-back → calibration).
