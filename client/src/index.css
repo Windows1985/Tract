@@ -1,4 +1,4 @@
-@import "@fontsource-variable/inter";
+@import "@fontsource-variable/geist";
 @import "@fontsource-variable/space-grotesk";
 @import "katex/dist/katex.min.css";
 @tailwind base;
@@ -19,21 +19,16 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-/* A whisper of colour at the top of the page — editorial, not decorative. */
 body::before {
   content: "";
   position: fixed;
   inset: 0;
   pointer-events: none;
-  background:
-    radial-gradient(900px 420px at 50% -10%, rgba(92, 95, 196, 0.07), transparent 70%),
-    radial-gradient(700px 380px at 85% 110%, rgba(92, 95, 196, 0.04), transparent 70%);
+  background: radial-gradient(900px 480px at 50% -5%, rgba(92, 95, 196, 0.04), transparent 65%);
 }
 @media (prefers-color-scheme: dark) {
   body::before {
-    background:
-      radial-gradient(900px 420px at 50% -10%, rgba(139, 141, 214, 0.09), transparent 70%),
-      radial-gradient(700px 380px at 85% 110%, rgba(139, 141, 214, 0.05), transparent 70%);
+    background: radial-gradient(900px 480px at 50% -5%, rgba(139, 141, 214, 0.05), transparent 65%);
   }
 }
 
@@ -65,5 +60,5 @@ input[type="date"] {
 textarea:focus-visible,
 input:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(92, 95, 196, 0.18);
+  box-shadow: 0 0 0 2px rgba(92, 95, 196, 0.3);
 }

@@ -148,9 +148,9 @@ export function SessionScreen({ onExit }: { onExit: () => void }) {
     <div className="mx-auto flex min-h-screen w-full max-w-2xl flex-col px-4 sm:px-6">
       {showChrome && (
         <div className="sticky top-0 z-10 -mx-4 flex items-center gap-4 bg-paper/80 px-4 pb-3 pt-5 backdrop-blur-sm dark:bg-paper-dark/80 sm:-mx-6 sm:px-6">
-          <div className="h-1 flex-1 overflow-hidden rounded-full bg-ink/10 dark:bg-ink-dark/15">
+          <div className="h-px flex-1 overflow-hidden bg-ink/10 dark:bg-ink-dark/15">
             <motion.div
-              className="h-full rounded-full bg-gradient-to-r from-accent-soft to-accent"
+              className="h-full bg-accent"
               animate={{ width: `${Math.round(progress * 100)}%` }}
               transition={{ duration: 0.4, ease: "easeOut" }}
             />
