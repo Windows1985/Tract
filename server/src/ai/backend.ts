@@ -14,6 +14,8 @@ import type {
 
 export interface AIBackend {
   extract(material: string, images: { data: string; mediaType: string }[]): Promise<ExtractionResult>;
+  /** Decompose raw notes into atomic propositions before extraction. */
+  segmentNotes(rawText: string): Promise<string[]>;
   distractors(statement: string, kind: string): Promise<string[]>;
   dedupe(candidates: string[], existing: string[]): Promise<DedupeResult>;
   probe(

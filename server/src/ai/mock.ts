@@ -32,6 +32,14 @@ export class MockBackend implements AIBackend {
     /* demo mode never fails validation */
   }
 
+  async segmentNotes(rawText: string): Promise<string[]> {
+    // Split on sentence-ending punctuation; keep non-trivial sentences.
+    return rawText
+      .split(/(?<=[.!?])\s+/)
+      .map((s) => s.trim())
+      .filter((s) => s.length >= 5);
+  }
+
   async extract(material: string): Promise<ExtractionResult> {
     // Split into sentences / lines; take the most substantial ones as items.
     const raw = material

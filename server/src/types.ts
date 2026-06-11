@@ -128,6 +128,9 @@ export const GradeSchema = z.object({
 });
 export type Grade = z.infer<typeof GradeSchema>;
 
+/** Array of atomic propositions produced by the segmentNotes pre-processing step. */
+export const SegmentedNotesSchema = z.array(z.string().min(5).max(300));
+
 export const CorrectiveSchema = z.object({
   explanation: z.string().min(3),
 });
