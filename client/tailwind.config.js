@@ -15,12 +15,12 @@ export default {
         },
       },
       fontFamily: {
-        sans: ["Inter Variable", "Inter", "ui-sans-serif", "system-ui", "-apple-system", "sans-serif"],
-        display: ["Space Grotesk Variable", "Space Grotesk", "Inter Variable", "system-ui", "sans-serif"],
+        sans: ["Geist Variable", "Geist", "ui-sans-serif", "system-ui", "-apple-system", "sans-serif"],
+        display: ["Space Grotesk Variable", "Space Grotesk", "Geist Variable", "system-ui", "sans-serif"],
       },
       boxShadow: {
-        glow: "0 8px 32px -8px rgba(92, 95, 196, 0.45)",
-        card: "0 1px 2px rgba(28,27,34,0.04), 0 8px 24px -12px rgba(28,27,34,0.10)",
+        glow: "0 4px 16px -4px rgba(92, 95, 196, 0.25)",
+        card: "0 1px 2px rgba(28,27,34,0.04), 0 8px 24px -12px rgba(28,27,34,0.08)",
       },
     },
   },

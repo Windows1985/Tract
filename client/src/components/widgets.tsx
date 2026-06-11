@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { Loader2 } from "lucide-react";
+import { ArrowsClockwise, GearSix } from "@phosphor-icons/react";
 
 /** Number that counts up over 400ms. */
 export function CountUp({ value, suffix = "" }: { value: number; suffix?: string }) {
@@ -33,9 +33,9 @@ export function CountUp({ value, suffix = "" }: { value: number; suffix?: string
 /** Thin memory bar that fills over 500ms ease-out. */
 export function MemoryBar({ percent }: { percent: number }) {
   return (
-    <div className="h-1 w-full overflow-hidden rounded-full bg-ink/10 dark:bg-ink-dark/15">
+    <div className="h-px w-full overflow-hidden bg-ink/10 dark:bg-ink-dark/15">
       <motion.div
-        className="h-full rounded-full bg-gradient-to-r from-accent-soft to-accent"
+        className="h-full bg-accent"
         initial={{ width: 0 }}
         animate={{ width: `${percent}%` }}
         transition={{ duration: 0.5, ease: "easeOut" }}
@@ -51,14 +51,14 @@ export function TimerRing({ seconds, total }: { seconds: number; total: number }
   const frac = Math.max(0, seconds / total);
   return (
     <svg width="64" height="64" viewBox="0 0 64 64" className="-rotate-90">
-      <circle cx="32" cy="32" r={r} fill="none" strokeWidth="3" className="stroke-ink/10 dark:stroke-ink-dark/15" />
+      <circle cx="32" cy="32" r={r} fill="none" strokeWidth="2" className="stroke-ink/8 dark:stroke-ink-dark/12" />
       <circle
         cx="32"
         cy="32"
         r={r}
         fill="none"
-        strokeWidth="3"
-        strokeLinecap="round"
+        strokeWidth="2"
+        strokeLinecap="butt"
         className="stroke-accent transition-[stroke-dashoffset] duration-1000 ease-linear"
         strokeDasharray={c}
         strokeDashoffset={c * (1 - frac)}
@@ -68,19 +68,21 @@ export function TimerRing({ seconds, total }: { seconds: number; total: number }
 }
 
 /**
- * Three-dot thinking indicator — the app's standard "the AI is working"
- * signal. Quiet, rhythmic, never a blocking overlay.
+ * Minimal waveform thinking indicator — three vertical bars that pulse in
+ * height, quieter and more editorial than three bouncing dots.
  */
 export function Thinking({ label }: { label?: string }) {
+  const reduced = useReducedMotion();
   return (
-    <div className="flex items-center gap-2.5 text-ink/50 dark:text-ink-dark/50">
-      <span className="flex items-end gap-1" aria-hidden>
+    <div className="flex items-center gap-3 text-ink/50 dark:text-ink-dark/50">
+      <span className="flex items-center gap-[3px]" aria-hidden>
         {[0, 1, 2].map((i) => (
           <motion.span
             key={i}
-            className="block h-1.5 w-1.5 rounded-full bg-accent"
-            animate={{ y: [0, -5, 0], opacity: [0.4, 1, 0.4] }}
-            transition={{ duration: 0.9, repeat: Infinity, ease: "easeInOut", delay: i * 0.14 }}
+            className="block w-[2px] rounded-[1px] bg-accent/60"
+            animate={reduced ? undefined : { height: [5, 13, 5] }}
+            style={{ height: 5 }}
+            transition={{ duration: 0.8, repeat: Infinity, ease: "easeInOut", delay: i * 0.13 }}
           />
         ))}
       </span>
@@ -89,34 +91,30 @@ export function Thinking({ label }: { label?: string }) {
   );
 }
 
-/** Inline spinner for buttons / option rows. */
+/** Inline spinner — a thin rotating arc, no icon library needed. */
 export function Spinner({ className = "h-4 w-4" }: { className?: string }) {
-  return <Loader2 className={`${className} animate-spin`} aria-label="loading" />;
+  return (
+    <span className={`${className} inline-block`} aria-label="loading">
+      <ArrowsClockwise className="h-full w-full animate-spin" weight="regular" />
+    </span>
+  );
 }
 
 /**
- * Full-bleed probe loading state: a breathing orb with a thinking label.
- * Shown when the next probe hasn't finished generating — should be rare,
- * since probes are pre-fetched.
+ * Probe loading state: a horizontal bar that breathes and a label below.
+ * Replaces the concentric orb — still communicates "generating" without
+ * the AI-generic pulse-circle look.
  */
 export function PulsePlaceholder({ label = "composing your next probe" }: { label?: string }) {
+  const reduced = useReducedMotion();
   return (
-    <div className="flex w-full flex-col items-center gap-6 py-16" aria-label="loading">
-      <div className="relative h-20 w-20">
+    <div className="flex w-full flex-col items-center gap-8 py-16" aria-label="loading">
+      <div className="relative h-px w-32 overflow-hidden bg-ink/8 dark:bg-ink-dark/10">
         <motion.div
-          className="absolute inset-0 rounded-full bg-accent/15"
-          animate={{ scale: [1, 1.5, 1], opacity: [0.5, 0, 0.5] }}
-          transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
-        />
-        <motion.div
-          className="absolute inset-3 rounded-full bg-accent/20"
-          animate={{ scale: [1, 1.18, 1] }}
-          transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
-        />
-        <motion.div
-          className="absolute inset-6 rounded-full bg-gradient-to-br from-accent-soft to-accent shadow-glow"
-          animate={{ scale: [1, 1.06, 1] }}
-          transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute inset-y-0 left-0 bg-accent"
+          animate={reduced ? undefined : { left: ["-100%", "100%"] }}
+          style={{ width: "40%" }}
+          transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
         />
       </div>
       <Thinking label={label} />
@@ -140,10 +138,10 @@ export function PrimaryButton({
   return (
     <motion.button
       whileHover={disabled ? undefined : { y: -1 }}
-      whileTap={disabled ? undefined : { scale: 0.97 }}
+      whileTap={disabled ? undefined : { scale: 0.98 }}
       onClick={onClick}
       disabled={disabled || busy}
-      className={`inline-flex items-center justify-center gap-2 rounded-full bg-accent px-8 py-3 text-base font-medium text-white shadow-glow transition-[opacity,box-shadow] hover:shadow-[0_10px_40px_-8px_rgba(92,95,196,0.6)] disabled:opacity-40 disabled:shadow-none ${className}`}
+      className={`inline-flex items-center justify-center gap-2 rounded bg-accent px-8 py-3 text-base font-medium tracking-[-0.01em] text-white transition-[opacity,background-color] hover:bg-accent/90 disabled:opacity-40 ${className}`}
     >
       {busy && <Spinner />}
       {children}
@@ -163,9 +161,12 @@ export function QuietButton({
   return (
     <button
       onClick={onClick}
-      className={`text-sm text-ink/50 underline-offset-4 transition-colors hover:text-ink dark:text-ink-dark/50 dark:hover:text-ink-dark ${className}`}
+      className={`text-sm text-ink/45 underline-offset-4 transition-colors hover:text-ink dark:text-ink-dark/45 dark:hover:text-ink-dark ${className}`}
     >
       {children}
     </button>
   );
 }
+
+/** Settings gear icon re-exported for use in screens without importing Phosphor directly. */
+export { GearSix };

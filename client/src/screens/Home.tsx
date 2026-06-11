@@ -1,9 +1,8 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Settings } from "lucide-react";
 import type { HomeView } from "../api";
 import { fade, staggerOption } from "../motion";
-import { MemoryBar, PrimaryButton, QuietButton } from "../components/widgets";
+import { GearSix, MemoryBar, PrimaryButton, QuietButton } from "../components/widgets";
 
 // One dominant element: today's minutes + Start. One row per goal. A quiet
 // add-material link. A footer gear. Nothing else.
@@ -75,9 +74,9 @@ export function Home({
         <button
           onClick={onOpenSettings}
           aria-label="settings"
-          className="rounded-full p-2 text-ink/30 transition-colors hover:bg-ink/5 hover:text-ink/70 dark:text-ink-dark/30 dark:hover:bg-ink-dark/10 dark:hover:text-ink-dark/70"
+          className="rounded p-2 text-ink/30 transition-colors hover:bg-ink/5 hover:text-ink/60 dark:text-ink-dark/30 dark:hover:bg-ink-dark/10 dark:hover:text-ink-dark/60"
         >
-          <Settings size={18} />
+          <GearSix size={18} />
         </button>
       </footer>
     </motion.div>
