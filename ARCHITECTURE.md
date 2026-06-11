@@ -140,3 +140,59 @@ SQLite at `./data/tract.db` (WAL). Tables: `items` (+ cached MCQ
 propagation_enabled), `snapshots` (a daily on-start job records each goal's
 projected score on its target date). Goals replace decks/subjects entirely;
 items link to goals via `goal_items`.
+
+## Sync-readiness
+
+The schema has been prepared for future multi-device sync via
+[CR-SQLite](https://github.com/vlcn-io/cr-sqlite) (CRDT-based SQLite
+replication). No new dependency is introduced yet — the changes are structural
+prerequisites only.
+
+### What was done
+
+**`evidence_events` — the replication unit.**
+The log is already append-only by design. DB-level `BEFORE UPDATE` and
+`BEFORE DELETE` triggers now enforce this at the SQLite layer, raising
+`ABORT` if anything attempts to mutate an existing row. The log's integrity
+is therefore guaranteed even from raw SQL access.
+
+**`snapshots` — confirmed append-only.**
+The daily snapshot write was changed from `ON CONFLICT DO UPDATE` to
+`INSERT OR IGNORE`. The first session of each day captures the baseline;
+subsequent sessions of the same day skip. The same protective triggers as
+`evidence_events` are added.
+
+**`memory_states` — explicitly a derived cache.**
+A prominent comment in `MemoryModel.ts` and in the schema marks this table as
+non-authoritative: it can be deleted and rebuilt by replaying
+`evidence_events` through the MemoryModel interface. In a sync scenario,
+each device reconstructs `memory_states` locally from the replicated log —
+it does not need to be replicated at all.
+
+**Mutable tables — `updated_at` columns.**
+`items`, `edges`, `goals`, and `goal_items` are mutable by design. Each now
+has an `updated_at` column (default `CURRENT_TIMESTAMP`) maintained by an
+`AFTER UPDATE` trigger. This is the prerequisite for **last-write-wins** merge
+semantics: when two devices both mutate the same row, the one with the later
+`updated_at` wins at merge time.
+
+**`sync_metadata` table.**
+A new `sync_metadata (device_id PK, last_sync_at, schema_version)` table
+establishes the namespace for device identity and sync-cursor state. It is
+empty for now.
+
+### CR-SQLite migration path
+
+When multi-device sync is needed:
+
+1. **Add `cr-sqlite` as a dependency** and load the extension at DB init.
+2. **Enable CRDT columns** on `items`, `edges`, `goals`, `goal_items` with
+   `SELECT crsql_as_crr('items')` etc. The `updated_at` columns are already
+   in place for LWW resolution.
+3. **Replicate `evidence_events`** as the primary sync payload. Because it is
+   append-only, there are no conflicts — only inserts. The protective triggers
+   ensure this invariant holds before sync is enabled.
+4. **Skip replicating `memory_states`** — each device rebuilds it from the
+   merged log. This avoids the complexity of syncing a derived cache.
+5. **`sync_metadata`** stores the per-device sync cursor (`last_sync_at`) so
+   incremental replication transfers only new evidence rows.

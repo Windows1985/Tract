@@ -8,9 +8,11 @@ import {
   ExtractionResultSchema,
   GeneratedProbeSchema,
   GradeSchema,
+  SegmentedNotesSchema,
   SweepDiffSchema,
 } from "../types.js";
 import { ingestionPrompt } from "../prompts/ingestion.js";
+import { segmentNotesPrompt } from "../prompts/segmentNotes.js";
 import { distractorsPrompt } from "../prompts/distractors.js";
 import { dedupePrompt } from "../prompts/dedupe.js";
 import {
@@ -98,6 +100,10 @@ export class AnthropicBackend implements AIBackend {
       }
     }
     throw new AIError("The AI returned an unusable response twice. Please try again.");
+  }
+
+  async segmentNotes(rawText: string): Promise<string[]> {
+    return this.completeJSON(SegmentedNotesSchema, segmentNotesPrompt(rawText), 2000);
   }
 
   async extract(material: string, images: { data: string; mediaType: string }[]) {

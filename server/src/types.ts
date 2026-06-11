@@ -122,11 +122,21 @@ export const SweepDiffSchema = z.object({
 });
 export type SweepDiff = z.infer<typeof SweepDiffSchema>;
 
+export const ErrorTypeSchema = z
+  .enum(["blank", "near_miss", "confident_wrong"])
+  .nullable();
+export type ErrorType = z.infer<typeof ErrorTypeSchema>;
+
 export const GradeSchema = z.object({
   outcome: OutcomeSchema,
   note: z.string(),
+  /** Null for pass/partial; classifies the nature of a fail. */
+  errorType: ErrorTypeSchema,
 });
 export type Grade = z.infer<typeof GradeSchema>;
+
+/** Array of atomic propositions produced by the segmentNotes pre-processing step. */
+export const SegmentedNotesSchema = z.array(z.string().min(5).max(300));
 
 export const CorrectiveSchema = z.object({
   explanation: z.string().min(3),

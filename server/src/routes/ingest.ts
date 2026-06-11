@@ -25,7 +25,11 @@ ingestRouter.post("/extract", async (req, res) => {
     return res.status(400).json({ error: "Paste some material first." });
   try {
     const ai = getAI();
-    const extraction = await ai.extract(text, allImages);
+    // Segment raw notes into atomic propositions before extraction so the
+    // item-extraction prompt receives well-formed, one-idea-per-sentence input.
+    const propositions = text.trim() ? await ai.segmentNotes(text) : [];
+    const segmentedText = propositions.length > 0 ? propositions.join("\n") : text;
+    const extraction = await ai.extract(segmentedText, allImages);
 
     // Re-ingesting overlapping material must dedupe: compare candidates to
     // existing item statements and skip duplicates before they're shown.

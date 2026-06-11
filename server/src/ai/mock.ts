@@ -32,6 +32,14 @@ export class MockBackend implements AIBackend {
     /* demo mode never fails validation */
   }
 
+  async segmentNotes(rawText: string): Promise<string[]> {
+    // Split on sentence-ending punctuation; keep non-trivial sentences.
+    return rawText
+      .split(/(?<=[.!?])\s+/)
+      .map((s) => s.trim())
+      .filter((s) => s.length >= 5);
+  }
+
   async extract(material: string): Promise<ExtractionResult> {
     // Split into sentences / lines; take the most substantial ones as items.
     const raw = material
@@ -143,9 +151,13 @@ export class MockBackend implements AIBackend {
 
   async grade(statement: string, _question: string, answer: string) {
     const score = overlap(statement, answer);
-    if (score >= 0.5) return { outcome: "pass" as const, note: "Covers the key point." };
-    if (score >= 0.25) return { outcome: "partial" as const, note: "Right direction, missing detail." };
-    return { outcome: "fail" as const, note: "That misses the core idea." };
+    if (score >= 0.5) return { outcome: "pass" as const, note: "Covers the key point.", errorType: null };
+    if (score >= 0.25) return { outcome: "partial" as const, note: "Right direction, missing detail.", errorType: null };
+    // Classify the fail type heuristically.
+    const trimmed = answer.trim().toLowerCase();
+    const isBlank = !trimmed || trimmed === "i don't know" || trimmed === "idk" || trimmed === "?";
+    const errorType = isBlank ? "blank" as const : score > 0.1 ? "near_miss" as const : "confident_wrong" as const;
+    return { outcome: "fail" as const, note: "That misses the core idea.", errorType };
   }
 
   async corrective(statement: string) {
