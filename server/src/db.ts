@@ -87,6 +87,7 @@ export function initDb(file?: string): DB {
 
 /** Additive migrations for databases created by earlier versions. */
 function migrate(d: DB) {
+  // ── original migrations ──────────────────────────────────────────────────
   const itemCols = (d.pragma("table_info(items)") as { name: string }[]).map((c) => c.name);
   if (!itemCols.includes("topic")) {
     d.exec("ALTER TABLE items ADD COLUMN topic TEXT NOT NULL DEFAULT ''");
@@ -99,6 +100,87 @@ function migrate(d: DB) {
       "ALTER TABLE evidence_events ADD COLUMN error_type TEXT CHECK(error_type IN ('blank','near_miss','confident_wrong')) DEFAULT NULL"
     );
   }
+
+  // ── CR-SQLite sync-readiness ─────────────────────────────────────────────
+  //
+  // evidence_events is the replication unit for future multi-device sync.
+  // It must be strictly append-only: no row may ever be updated or deleted.
+  // Triggers enforce this at the DB level, protecting log integrity.
+  const triggers = (
+    d.prepare("SELECT name FROM sqlite_master WHERE type='trigger'").all() as { name: string }[]
+  ).map((r) => r.name);
+
+  if (!triggers.includes("no_update_evidence_events")) {
+    d.exec(`
+      CREATE TRIGGER no_update_evidence_events
+      BEFORE UPDATE ON evidence_events
+      BEGIN
+        SELECT RAISE(ABORT, 'evidence_events is append-only: UPDATE is not permitted');
+      END
+    `);
+  }
+  if (!triggers.includes("no_delete_evidence_events")) {
+    d.exec(`
+      CREATE TRIGGER no_delete_evidence_events
+      BEFORE DELETE ON evidence_events
+      BEGIN
+        SELECT RAISE(ABORT, 'evidence_events is append-only: DELETE is not permitted');
+      END
+    `);
+  }
+
+  // snapshots is also append-only (one row per date+goal, never mutated).
+  // The write path uses INSERT OR IGNORE so no UPDATE ever occurs.
+  if (!triggers.includes("no_update_snapshots")) {
+    d.exec(`
+      CREATE TRIGGER no_update_snapshots
+      BEFORE UPDATE ON snapshots
+      BEGIN
+        SELECT RAISE(ABORT, 'snapshots is append-only: UPDATE is not permitted');
+      END
+    `);
+  }
+  if (!triggers.includes("no_delete_snapshots")) {
+    d.exec(`
+      CREATE TRIGGER no_delete_snapshots
+      BEFORE DELETE ON snapshots
+      BEGIN
+        SELECT RAISE(ABORT, 'snapshots is append-only: DELETE is not permitted');
+      END
+    `);
+  }
+
+  // Mutable tables: add updated_at + auto-update trigger for last-write-wins
+  // merge semantics when CR-SQLite replication is introduced.
+  for (const table of ["items", "edges", "goals", "goal_items"] as const) {
+    const cols = (d.pragma(`table_info(${table})`) as { name: string }[]).map((c) => c.name);
+    if (!cols.includes("updated_at")) {
+      d.exec(`ALTER TABLE ${table} ADD COLUMN updated_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)`);
+    }
+    const tname = `${table}_set_updated_at`;
+    if (!triggers.includes(tname)) {
+      // Use the table's first PRIMARY KEY column for the WHERE clause.
+      const pkCol = table === "edges" ? "item_a" : table === "goal_items" ? "goal_id" : "id";
+      d.exec(`
+        CREATE TRIGGER ${tname}
+        AFTER UPDATE ON ${table}
+        FOR EACH ROW
+        BEGIN
+          UPDATE ${table} SET updated_at = CURRENT_TIMESTAMP WHERE ${pkCol} = NEW.${pkCol};
+        END
+      `);
+    }
+  }
+
+  // sync_metadata: namespace for future device-identity and sync-cursor state.
+  d.exec(`
+    CREATE TABLE IF NOT EXISTS sync_metadata (
+      device_id       TEXT NOT NULL,
+      last_sync_at    INTEGER,
+      schema_version  INTEGER NOT NULL DEFAULT 1,
+      PRIMARY KEY (device_id)
+    )
+  `);
 }
 
 export function getDb(): DB {

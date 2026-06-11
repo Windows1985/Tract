@@ -3,6 +3,12 @@ import type { MemoryStateRow, Modality, Outcome } from "../types.js";
 /**
  * MemoryModel — the swappable module that owns memory_states.
  *
+ * SYNC NOTE: memory_states is a DERIVED CACHE, not source-of-truth data.
+ * It can be deleted and fully rebuilt by replaying evidence_events through
+ * the MemoryModel interface. This property is critical for CR-SQLite sync:
+ * memory_states does not need to be replicated — each device reconstructs
+ * it locally from the replicated evidence log.
+ *
  * v1 is a per-item FSRS implementation (see fsrs.ts): a "Newtonian
  * approximation" of memory — a closed-form forgetting curve per item, updated
  * from discrete review ratings. It is deliberately wrapped behind this

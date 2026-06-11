@@ -93,8 +93,10 @@ function writeDailySnapshots(now: Date) {
   for (const g of goals) {
     const at = g.target_date ? new Date(g.target_date) : now;
     const projected = goalMeanRetrievability(g.id, at > now ? at : now);
+    // INSERT OR IGNORE: snapshots is append-only; the first session of the
+    // day captures the baseline — subsequent sessions of the same day skip.
     db.prepare(
-      "INSERT INTO snapshots (date, goal_id, projected_score) VALUES (?, ?, ?) ON CONFLICT(date, goal_id) DO UPDATE SET projected_score = excluded.projected_score"
+      "INSERT OR IGNORE INTO snapshots (date, goal_id, projected_score) VALUES (?, ?, ?)"
     ).run(today, g.id, projected);
   }
 }
