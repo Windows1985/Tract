@@ -151,9 +151,13 @@ export class MockBackend implements AIBackend {
 
   async grade(statement: string, _question: string, answer: string) {
     const score = overlap(statement, answer);
-    if (score >= 0.5) return { outcome: "pass" as const, note: "Covers the key point." };
-    if (score >= 0.25) return { outcome: "partial" as const, note: "Right direction, missing detail." };
-    return { outcome: "fail" as const, note: "That misses the core idea." };
+    if (score >= 0.5) return { outcome: "pass" as const, note: "Covers the key point.", errorType: null };
+    if (score >= 0.25) return { outcome: "partial" as const, note: "Right direction, missing detail.", errorType: null };
+    // Classify the fail type heuristically.
+    const trimmed = answer.trim().toLowerCase();
+    const isBlank = !trimmed || trimmed === "i don't know" || trimmed === "idk" || trimmed === "?";
+    const errorType = isBlank ? "blank" as const : score > 0.1 ? "near_miss" as const : "confident_wrong" as const;
+    return { outcome: "fail" as const, note: "That misses the core idea.", errorType };
   }
 
   async corrective(statement: string) {

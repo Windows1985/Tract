@@ -122,9 +122,16 @@ export const SweepDiffSchema = z.object({
 });
 export type SweepDiff = z.infer<typeof SweepDiffSchema>;
 
+export const ErrorTypeSchema = z
+  .enum(["blank", "near_miss", "confident_wrong"])
+  .nullable();
+export type ErrorType = z.infer<typeof ErrorTypeSchema>;
+
 export const GradeSchema = z.object({
   outcome: OutcomeSchema,
   note: z.string(),
+  /** Null for pass/partial; classifies the nature of a fail. */
+  errorType: ErrorTypeSchema,
 });
 export type Grade = z.infer<typeof GradeSchema>;
 

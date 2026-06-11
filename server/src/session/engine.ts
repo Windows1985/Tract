@@ -5,7 +5,7 @@ import { loadState, loadStates, saveState } from "../memory/store.js";
 import { FsrsMemoryModel } from "../memory/fsrs.js";
 import { outcomeToRating, rescaleRating } from "../memory/MemoryModel.js";
 import { V1Scheduler } from "../scheduler/v1.js";
-import type { Item, Kind, Modality, Outcome, QueueEntry, SessionPlan } from "../types.js";
+import type { ErrorType, Item, Kind, Modality, Outcome, QueueEntry, SessionPlan } from "../types.js";
 import { State } from "ts-fsrs";
 
 // In-memory session runner. A session is ephemeral compose-and-run state;
@@ -298,6 +298,7 @@ export async function submitAnswer(
   let outcome: Outcome;
   let note: string | null = null;
   let answerText: string | null = null;
+  let errorType: ErrorType = null;
 
   if (entry.modality === "mcq") {
     answerText = probe.options?.[response.optionIndex ?? -1] ?? null;
@@ -311,6 +312,7 @@ export async function submitAnswer(
     const grade = await getAI().grade(item.statement, probe.question, answerText);
     outcome = grade.outcome;
     note = grade.note;
+    errorType = grade.errorType;
   }
 
   // FSRS update through the MemoryModel.
@@ -352,15 +354,23 @@ export async function submitAnswer(
       verdict_note: note,
       rating,
       retry: entry.isRetry,
+      error_type: errorType,
     },
     outcome,
     duration_ms: durationMs,
+    error_type: errorType,
   });
   session.results.push({ itemId: entry.itemId, outcome, isRetry: entry.isRetry });
 
   // Error loop-back: corrective explanation, then the item returns near the
   // session's end as a recognition-level re-probe. Never end a session with
   // an item left failed.
+  //
+  // Loop-back rules by error_type:
+  //   confident_wrong → 2 re-probes (exhaust retry budget), corrective always shown
+  //   near_miss       → 1 re-probe (standard)
+  //   blank           → 1 re-probe at MCQ (demote two levels: typed/explain→mcq)
+  //   null (mcq/cued) → 1 re-probe (standard)
   let corrective: string | null = null;
   if (outcome === "fail") {
     const c = await getAI().corrective(item.statement, probe.question, answerText);
@@ -369,14 +379,24 @@ export async function submitAnswer(
       item_id: entry.itemId,
       type: "correction",
       modality: entry.modality,
-      payload: { session_id: session.id, explanation: corrective, question: probe.question },
+      payload: { session_id: session.id, explanation: corrective, question: probe.question, error_type: errorType },
       outcome: null,
       duration_ms: null,
     });
     const retries = session.retryCount.get(entry.itemId) ?? 0;
     if (retries < 2) {
-      session.retryCount.set(entry.itemId, retries + 1);
-      session.plan.queue.push({ itemId: entry.itemId, modality: "mcq", isRetry: true });
+      if (errorType === "confident_wrong") {
+        // Exhaust the full retry budget in one go (up to 2 re-probes).
+        const budget = 2 - retries;
+        for (let k = 0; k < budget; k++) {
+          session.plan.queue.push({ itemId: entry.itemId, modality: "mcq", isRetry: true });
+        }
+        session.retryCount.set(entry.itemId, 2);
+      } else {
+        // near_miss, blank, or null: one standard re-probe at MCQ level.
+        session.retryCount.set(entry.itemId, retries + 1);
+        session.plan.queue.push({ itemId: entry.itemId, modality: "mcq", isRetry: true });
+      }
     }
   }
 

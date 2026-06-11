@@ -17,4 +17,9 @@ Grade:
 
 "note" is ONE short line of feedback (max ~15 words) — what was right or what was missed. Be honest, never falsely encouraging.
 
-Return ONLY JSON: {"outcome":"pass"|"partial"|"fail","note":string}`;
+"errorType" classifies the nature of a failure; use null for pass or partial:
+- "blank": learner wrote nothing, "I don't know", or equivalent
+- "near_miss": correct core concept but wrong detail, or correct under a different framing
+- "confident_wrong": learner stated an incorrect answer as if certain
+
+Return ONLY JSON: {"outcome":"pass"|"partial"|"fail","note":string,"errorType":"blank"|"near_miss"|"confident_wrong"|null}`;

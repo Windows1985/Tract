@@ -87,9 +87,17 @@ export function initDb(file?: string): DB {
 
 /** Additive migrations for databases created by earlier versions. */
 function migrate(d: DB) {
-  const cols = (d.pragma("table_info(items)") as { name: string }[]).map((c) => c.name);
-  if (!cols.includes("topic")) {
+  const itemCols = (d.pragma("table_info(items)") as { name: string }[]).map((c) => c.name);
+  if (!itemCols.includes("topic")) {
     d.exec("ALTER TABLE items ADD COLUMN topic TEXT NOT NULL DEFAULT ''");
+  }
+
+  // Error taxonomy: distinguish blank / near_miss / confident_wrong within fails.
+  const evCols = (d.pragma("table_info(evidence_events)") as { name: string }[]).map((c) => c.name);
+  if (!evCols.includes("error_type")) {
+    d.exec(
+      "ALTER TABLE evidence_events ADD COLUMN error_type TEXT CHECK(error_type IN ('blank','near_miss','confident_wrong')) DEFAULT NULL"
+    );
   }
 }
 

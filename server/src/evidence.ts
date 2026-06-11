@@ -11,14 +11,26 @@ export function logEvent(e: {
   payload: unknown;
   outcome: Outcome | null;
   duration_ms: number | null;
+  /** Null for non-fail outcomes; classifies the nature of a typed/explain fail. */
+  error_type?: "blank" | "near_miss" | "confident_wrong" | null;
 }): string {
   const id = uid();
   getDb()
     .prepare(
-      `INSERT INTO evidence_events (id, item_id, type, modality, payload, outcome, duration_ms, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO evidence_events (id, item_id, type, modality, payload, outcome, duration_ms, created_at, error_type)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
-    .run(id, e.item_id, e.type, e.modality, JSON.stringify(e.payload ?? {}), e.outcome, e.duration_ms, nowIso());
+    .run(
+      id,
+      e.item_id,
+      e.type,
+      e.modality,
+      JSON.stringify(e.payload ?? {}),
+      e.outcome,
+      e.duration_ms,
+      nowIso(),
+      e.error_type ?? null
+    );
   return id;
 }
 
