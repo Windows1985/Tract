@@ -66,6 +66,7 @@ describe("error_type persisted on evidence events", () => {
     if (!found) return; // item not scheduled as typed — skip
 
     await submitAnswer(session, found.idx, 5000, { text: "wrong answer" });
+    await Promise.all([...session.pendingGrades.values()]);
 
     const row = getDb()
       .prepare(
@@ -116,6 +117,7 @@ describe("fail loop-back rules per error_type", () => {
 
     const before = session.plan.queue.length;
     await submitAnswer(session, found.idx, 5000, { text: "wrong answer" });
+    await Promise.all([...session.pendingGrades.values()]);
 
     const retries = session.plan.queue.filter((q) => q.itemId === id && q.isRetry);
     expect(retries.length).toBe(2);
@@ -133,6 +135,7 @@ describe("fail loop-back rules per error_type", () => {
 
     const before = session.plan.queue.length;
     await submitAnswer(session, found.idx, 5000, { text: "partly right" });
+    await Promise.all([...session.pendingGrades.values()]);
 
     const retries = session.plan.queue.filter((q) => q.itemId === id && q.isRetry);
     expect(retries.length).toBe(1);
@@ -149,6 +152,7 @@ describe("fail loop-back rules per error_type", () => {
 
     const before = session.plan.queue.length;
     await submitAnswer(session, found.idx, 5000, { text: "" });
+    await Promise.all([...session.pendingGrades.values()]);
 
     const retries = session.plan.queue.filter((q) => q.itemId === id && q.isRetry);
     expect(retries.length).toBe(1);
@@ -165,6 +169,7 @@ describe("fail loop-back rules per error_type", () => {
 
     // First typed fail → 2 retries pushed, retryCount = 2.
     await submitAnswer(session, found.idx, 5000, { text: "wrong answer" });
+    await Promise.all([...session.pendingGrades.values()]);
     expect(session.retryCount.get(id)).toBe(2);
     const afterFirst = session.plan.queue.filter((q) => q.itemId === id && q.isRetry).length;
     expect(afterFirst).toBe(2);

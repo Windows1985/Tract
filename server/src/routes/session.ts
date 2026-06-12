@@ -3,12 +3,14 @@ import { z } from "zod";
 import {
   extendSession,
   finishSession,
+  flagProbe,
   getProbe,
   getSession,
   startSession,
   submitAnswer,
   submitCalibration,
   submitSweep,
+  type DeferredVerdict,
 } from "../session/engine.js";
 import { AIError } from "../ai/backend.js";
 import { OutcomeSchema } from "../types.js";
@@ -119,6 +121,35 @@ sessionRouter.post("/:id/finish", (req, res) => {
       sessionsThisWeek: sessionsInWeek(0),
       sessionsLastWeek: sessionsInWeek(1),
     });
+  } catch (err) {
+    handleErr(res, err);
+  }
+});
+
+const FlagProbeBody = z.object({
+  index: z.number().int().nonnegative(),
+  reason: z.string().optional(),
+});
+
+sessionRouter.post("/:id/flag_probe", (req, res) => {
+  try {
+    const s = getSession(req.params.id);
+    const body = FlagProbeBody.parse(req.body);
+    flagProbe(s, body.index, body.reason);
+    res.json({ ok: true });
+  } catch (err) {
+    handleErr(res, err);
+  }
+});
+
+/** Poll for completed background-graded verdicts (typed/explain probes). */
+sessionRouter.get("/:id/verdicts", (req, res) => {
+  try {
+    const s = getSession(req.params.id);
+    const verdicts: DeferredVerdict[] = [...s.deferredVerdicts.values()];
+    // Clear returned verdicts so the client doesn't process them twice.
+    s.deferredVerdicts.clear();
+    res.json({ verdicts, pending: s.pendingGrades.size, });
   } catch (err) {
     handleErr(res, err);
   }

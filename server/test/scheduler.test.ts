@@ -151,3 +151,60 @@ describe("sweep selection", () => {
     expect(plan.sweep).toBeNull();
   });
 });
+
+describe("contrast interleaving phases", () => {
+  let scheduler: V1Scheduler;
+  beforeEach(() => {
+    freshDb();
+    scheduler = new V1Scheduler(new FsrsMemoryModel());
+  });
+
+  function makeContrastPair() {
+    // a: very weak (low R, comes first); fillers: mid R; b: strong (high R, comes last).
+    // This ensures fillers appear between a and b in the natural sort order.
+    const a = insertItem({ statement: "Mitosis splits one nucleus into two identical nuclei.", kind: "distinction" });
+    setMemoryState(a, { stability: 1, lastReviewDaysAgo: 30, dueDaysAgo: 1 }); // very low R
+    const b = insertItem({ statement: "Meiosis halves the chromosome count across two divisions.", kind: "distinction" });
+    setMemoryState(b, { stability: 100, lastReviewDaysAgo: 1, dueDaysAgo: 0.5 }); // high R
+    addEdge(a, b, "contrasts_with", 0.9);
+    // Filler items with mid-range R (between a and b).
+    const fillers = Array.from({ length: 6 }, (_, i) => {
+      const id = insertItem({ statement: `Filler item ${i} for spacing test here.` });
+      setMemoryState(id, { stability: 5, lastReviewDaysAgo: 5, dueDaysAgo: 1 });
+      return id;
+    });
+    return { a, b, fillers };
+  }
+
+  it("places contrast pairs adjacently when both have <3 typed/explain passes", () => {
+    const { a, b } = makeContrastPair();
+    // No typed/explain pass events: both have 0 passes.
+    const plan = scheduler.buildSession();
+    const ids = plan.queue.map((q) => q.itemId);
+    expect(ids).toContain(a);
+    expect(ids).toContain(b);
+    expect(Math.abs(ids.indexOf(a) - ids.indexOf(b))).toBe(1);
+  });
+
+  it("separates contrast pairs by ≥3 items when both have ≥3 typed/explain passes", () => {
+    const { a, b } = makeContrastPair();
+    // Give both items ≥3 typed/explain passes.
+    for (const id of [a, b]) {
+      for (const sid of ["s1", "s2", "s3"]) {
+        logEvent({
+          item_id: id,
+          type: "probe",
+          modality: "typed",
+          payload: { session_id: sid },
+          outcome: "pass",
+          duration_ms: 1000,
+        });
+      }
+    }
+    const plan = scheduler.buildSession();
+    const ids = plan.queue.map((q) => q.itemId);
+    expect(ids).toContain(a);
+    expect(ids).toContain(b);
+    expect(Math.abs(ids.indexOf(a) - ids.indexOf(b))).toBeGreaterThanOrEqual(3);
+  });
+});

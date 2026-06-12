@@ -155,7 +155,7 @@ function migrate(d: DB) {
   for (const table of ["items", "edges", "goals", "goal_items"] as const) {
     const cols = (d.pragma(`table_info(${table})`) as { name: string }[]).map((c) => c.name);
     if (!cols.includes("updated_at")) {
-      d.exec(`ALTER TABLE ${table} ADD COLUMN updated_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)`);
+      d.exec(`ALTER TABLE ${table} ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''`);
     }
     const tname = `${table}_set_updated_at`;
     if (!triggers.includes(tname)) {
@@ -179,6 +179,17 @@ function migrate(d: DB) {
       last_sync_at    INTEGER,
       schema_version  INTEGER NOT NULL DEFAULT 1,
       PRIMARY KEY (device_id)
+    )
+  `);
+
+  // probe_flags: user-reported bad probes excluded from future generation.
+  d.exec(`
+    CREATE TABLE IF NOT EXISTS probe_flags (
+      id TEXT PRIMARY KEY,
+      item_id TEXT NOT NULL,
+      question TEXT NOT NULL,
+      reason TEXT NOT NULL DEFAULT 'bad_probe',
+      created_at TEXT NOT NULL
     )
   `);
 }
