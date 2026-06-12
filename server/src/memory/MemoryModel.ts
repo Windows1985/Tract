@@ -38,6 +38,12 @@ export interface MemoryModel {
    * stability bonus, capped at +10% of current stability.
    */
   applyStabilityBonus(state: MemoryStateRow, fraction: number): MemoryStateRow;
+  /**
+   * Soft stability decay for an omitted sweep item (not recalled in a sweep,
+   * but not actively wrong). Decays stability by ~half what a fail would do
+   * so the item moves earlier in the queue without being treated as a lapse.
+   */
+  applySweepOmission(state: MemoryStateRow, now?: Date): MemoryStateRow;
 }
 
 /**
@@ -51,7 +57,7 @@ export function outcomeToRating(
   modality: Modality,
   fasterThanMedian: boolean
 ): Rating {
-  if (outcome === "fail") return 1;
+  if (outcome === "fail" || outcome === "omitted") return 1;
   if (outcome === "partial") return 2;
   const deep = modality === "typed" || modality === "explain";
   return deep && fasterThanMedian ? 4 : 3;

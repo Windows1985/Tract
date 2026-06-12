@@ -26,7 +26,8 @@ import { sweepDiffPrompt } from "../prompts/sweepDiff.js";
 import { gradingPrompt } from "../prompts/grading.js";
 import { correctivePrompt } from "../prompts/corrective.js";
 
-const MODEL = "claude-haiku-4-5-20251001";
+const MODEL_FAST = "claude-haiku-4-5-20251001"; // grading, dedupe, corrective, distractors
+const MODEL_CAPABLE = "claude-sonnet-4-20250514"; // ingestion, probe-gen, sweep-diff
 
 type ImageMediaType = "image/jpeg" | "image/png" | "image/gif" | "image/webp";
 type ContentBlock =
@@ -64,7 +65,8 @@ export class AnthropicBackend implements AIBackend {
     schema: S,
     prompt: string,
     maxTokens: number,
-    extraContent: ContentBlock[] = []
+    extraContent: ContentBlock[] = [],
+    model: string = MODEL_FAST
   ): Promise<z.output<S>> {
     const content: ContentBlock[] = [...extraContent, { type: "text", text: prompt }];
     let lastRaw = "";
@@ -83,7 +85,7 @@ export class AnthropicBackend implements AIBackend {
             ];
       let resp: Anthropic.Message;
       try {
-        resp = await this.client.messages.create({ model: MODEL, max_tokens: maxTokens, messages });
+        resp = await this.client.messages.create({ model, max_tokens: maxTokens, messages });
       } catch (err: any) {
         if (err?.status === 401) throw new AIError("Your API key was rejected. Update it from the footer link.");
         if (err?.status === 429) throw new AIError("Anthropic rate limit hit — wait a moment and try again.");
@@ -103,7 +105,7 @@ export class AnthropicBackend implements AIBackend {
   }
 
   async segmentNotes(rawText: string): Promise<string[]> {
-    return this.completeJSON(SegmentedNotesSchema, segmentNotesPrompt(rawText), 2000);
+    return this.completeJSON(SegmentedNotesSchema, segmentNotesPrompt(rawText), 2000, [], MODEL_FAST);
   }
 
   async extract(material: string, images: { data: string; mediaType: string }[]) {
@@ -117,16 +119,16 @@ export class AnthropicBackend implements AIBackend {
         data: img.data,
       },
     }));
-    return this.completeJSON(ExtractionResultSchema, ingestionPrompt(material, extra.length > 0), 8000, extra);
+    return this.completeJSON(ExtractionResultSchema, ingestionPrompt(material, extra.length > 0), 8000, extra, MODEL_CAPABLE);
   }
 
   async distractors(statement: string, kind: string) {
-    const r = await this.completeJSON(DistractorsSchema, distractorsPrompt(statement, kind), 600);
+    const r = await this.completeJSON(DistractorsSchema, distractorsPrompt(statement, kind), 600, [], MODEL_FAST);
     return r.distractors;
   }
 
   async dedupe(candidates: string[], existing: string[]) {
-    return this.completeJSON(DedupeResultSchema, dedupePrompt(candidates, existing), 2000);
+    return this.completeJSON(DedupeResultSchema, dedupePrompt(candidates, existing), 2000, [], MODEL_FAST);
   }
 
   async probe(
@@ -145,19 +147,19 @@ export class AnthropicBackend implements AIBackend {
             : modality === "explain"
               ? explainProbePrompt(statement, avoid)
               : contrastProbePrompt(statement, contrastStatement, avoid);
-    return this.completeJSON(GeneratedProbeSchema, prompt, 500);
+    return this.completeJSON(GeneratedProbeSchema, prompt, 500, [], MODEL_CAPABLE);
   }
 
   async sweepDiff(goalName: string, items: { id: string; statement: string }[], dump: string) {
-    return this.completeJSON(SweepDiffSchema, sweepDiffPrompt(goalName, items, dump), 2500);
+    return this.completeJSON(SweepDiffSchema, sweepDiffPrompt(goalName, items, dump), 2500, [], MODEL_CAPABLE);
   }
 
   async grade(statement: string, question: string, answer: string) {
-    return this.completeJSON(GradeSchema, gradingPrompt(statement, question, answer), 300);
+    return this.completeJSON(GradeSchema, gradingPrompt(statement, question, answer), 300, [], MODEL_FAST);
   }
 
   async corrective(statement: string, question: string, learnerAnswer: string | null) {
-    return this.completeJSON(CorrectiveSchema, correctivePrompt(statement, question, learnerAnswer), 400);
+    return this.completeJSON(CorrectiveSchema, correctivePrompt(statement, question, learnerAnswer), 400, [], MODEL_FAST);
   }
 }
 

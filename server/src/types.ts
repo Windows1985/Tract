@@ -12,7 +12,7 @@ export type Kind = z.infer<typeof KindSchema>;
 export const ModalitySchema = z.enum(["mcq", "cued", "typed", "free_recall", "explain"]);
 export type Modality = z.infer<typeof ModalitySchema>;
 
-export const OutcomeSchema = z.enum(["pass", "partial", "fail"]);
+export const OutcomeSchema = z.enum(["pass", "partial", "fail", "omitted"]);
 export type Outcome = z.infer<typeof OutcomeSchema>;
 
 export const EventTypeSchema = z.enum(["probe", "sweep", "correction", "calibration"]);

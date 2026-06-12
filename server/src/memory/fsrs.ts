@@ -46,6 +46,16 @@ export class FsrsMemoryModel implements MemoryModel {
     const f = Math.min(Math.max(fraction, 0), 0.1); // hard cap: ≤10% of a normal update's effect
     return { ...state, stability: state.stability * (1 + f) };
   }
+
+  applySweepOmission(state: MemoryStateRow, now: Date = new Date()): MemoryStateRow {
+    // Decay stability by ~half what a fail rating would produce, without
+    // incrementing lapses or resetting the FSRS state machine. This moves
+    // the item earlier in the queue without recording a lapse.
+    const failState = this.review(state, 1, now);
+    const decayedStability = state.stability + (failState.stability - state.stability) * 0.5;
+    const newDue = new Date(now.getTime() + decayedStability * 86_400_000);
+    return { ...state, stability: decayedStability, due: newDue.toISOString() };
+  }
 }
 
 /** FSRS-5 power forgetting curve: R(t) = (1 + FACTOR · t/S)^DECAY */

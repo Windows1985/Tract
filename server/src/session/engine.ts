@@ -1,6 +1,6 @@
 import { getDb, propagationEnabled, uid } from "../db.js";
 import { getAI } from "../ai/index.js";
-import { logEvent, medianPassDurationMs, recentProbeQuestions } from "../evidence.js";
+import { getFlaggedProbeQuestions, logEvent, meanCalibrationBias, medianNormalizedDurationMs, recentProbeQuestions } from "../evidence.js";
 import { loadState, loadStates, saveState } from "../memory/store.js";
 import { FsrsMemoryModel } from "../memory/fsrs.js";
 import { outcomeToRating, rescaleRating } from "../memory/MemoryModel.js";
@@ -29,6 +29,14 @@ interface CachedProbe {
   correctIndex?: number;
 }
 
+export interface DeferredVerdict {
+  index: number;
+  outcome: Outcome;
+  note: string | null;
+  corrective: string | null;
+  queueLength: number;
+}
+
 export interface Session {
   id: string;
   startedAt: number;
@@ -39,6 +47,10 @@ export interface Session {
   results: { itemId: string; outcome: Outcome; isRetry: boolean }[];
   retryCount: Map<string, number>;
   goalStartR: Map<string, number>;
+  /** Completed background grade results, keyed by probe index. */
+  deferredVerdicts: Map<number, DeferredVerdict>;
+  /** Active background grade promises, keyed by probe index. */
+  pendingGrades: Map<number, Promise<void>>;
 }
 
 const sessions = new Map<string, Session>();
@@ -76,6 +88,8 @@ export function startSession(now: Date = new Date()): Session {
     results: [],
     retryCount: new Map(),
     goalStartR,
+    deferredVerdicts: new Map(),
+    pendingGrades: new Map(),
   };
   // Prune sessions older than 6 hours — durable truth lives in the log.
   for (const [id, s] of sessions) {
@@ -139,12 +153,19 @@ export async function submitSweep(session: Session, dump: string, durationMs: nu
       });
     } else {
       slipped.push({ itemId: it.id, statement: getItem(it.id).statement, verdict });
+      const omittedOutcome = verdict === "mentioned_wrong" ? "fail" : "omitted";
+      if (verdict === "omitted") {
+        const state = loadState(it.id);
+        if (state && state.state !== State.New) {
+          saveState(memoryModel.applySweepOmission(state));
+        }
+      }
       logEvent({
         item_id: it.id,
         type: "sweep",
         modality: "free_recall",
         payload: { session_id: session.id, verdict, goal_id: sweep.goalId },
-        outcome: verdict === "mentioned_wrong" ? "fail" : null,
+        outcome: omittedOutcome,
         duration_ms: null,
       });
       // Wrong/omitted items are queued for probing today (front of queue,
@@ -198,7 +219,9 @@ async function generateProbe(session: Session, index: number): Promise<CachedPro
   const entry = session.plan.queue[index];
   if (!entry) throw new Error("No probe at that index");
   const item = getItem(entry.itemId);
-  const avoid = recentProbeQuestions(entry.itemId, 60);
+  const recent = recentProbeQuestions(entry.itemId, 60);
+  const flagged = getFlaggedProbeQuestions(entry.itemId);
+  const avoid = [...new Set([...recent, ...flagged])];
   const ai = getAI();
 
   if (entry.modality === "mcq") {
@@ -277,12 +300,14 @@ export async function getProbe(session: Session, index: number): Promise<ProbeVi
 // --- answers -----------------------------------------------------------------
 
 export interface AnswerResult {
-  outcome: Outcome;
+  outcome: Outcome | null;
   note: string | null;
   canonical: string;
   correctIndex?: number;
   corrective: string | null;
   queueLength: number;
+  /** true when grading is happening in the background; poll GET /:id/verdicts */
+  deferred?: boolean;
 }
 
 export async function submitAnswer(
@@ -297,29 +322,101 @@ export async function submitAnswer(
   if (!probe) throw new Error("Probe was never fetched");
   const item = getItem(entry.itemId);
 
-  let outcome: Outcome;
-  let note: string | null = null;
-  let answerText: string | null = null;
-  let errorType: ErrorType = null;
+  const answerText = (entry.modality !== "mcq" && entry.modality !== "cued") ? (response.text ?? "") : null;
+  const isDeferred = entry.modality === "typed" || entry.modality === "explain";
 
   if (entry.modality === "mcq") {
-    answerText = probe.options?.[response.optionIndex ?? -1] ?? null;
-    outcome = response.optionIndex === probe.correctIndex ? "pass" : "fail";
-  } else if (entry.modality === "cued") {
-    // Think → reveal → one-tap self-confirm (1/2/3).
-    if (!response.selfRating) throw new Error("selfRating required for cued probes");
-    outcome = response.selfRating;
-  } else {
-    answerText = response.text ?? "";
-    const grade = await getAI().grade(item.statement, probe.question, answerText);
-    outcome = grade.outcome;
-    note = grade.note;
-    errorType = grade.errorType;
+    const selectedText = probe.options?.[response.optionIndex ?? -1] ?? null;
+    const outcome: Outcome = response.optionIndex === probe.correctIndex ? "pass" : "fail";
+    return applyVerdict(session, entry, probe, outcome, null, null, durationMs, selectedText, false);
   }
 
+  if (entry.modality === "cued") {
+    if (!response.selfRating) throw new Error("selfRating required for cued probes");
+    return applyVerdict(session, entry, probe, response.selfRating, null, null, durationMs, null, false);
+  }
+
+  // typed / explain: fire off grading in background, return immediately.
+  if (isDeferred) {
+    // Return immediately — client gets deferred:true and polls for verdict.
+    const p = gradeInBackground(session, index, entry, probe, item, answerText!, durationMs);
+    session.pendingGrades.set(index, p);
+    return {
+      outcome: null,
+      note: null,
+      canonical: item.statement,
+      correctIndex: undefined,
+      corrective: null,
+      queueLength: session.plan.queue.length,
+      deferred: true,
+    };
+  }
+
+  // Should never reach here, but fallback for exhaustiveness.
+  throw new Error("Unhandled modality");
+}
+
+/** Background grade. Returns a promise so callers can await completion if needed. */
+function gradeInBackground(
+  session: Session,
+  index: number,
+  entry: import("../types.js").QueueEntry,
+  probe: CachedProbe,
+  item: Item,
+  answerText: string,
+  durationMs: number
+): Promise<void> {
+  const p = getAI()
+    .grade(item.statement, probe.question, answerText)
+    .then(async (grade) => {
+      const { outcome, note, errorType } = grade;
+      const result = await applyVerdict(session, entry, probe, outcome, note, errorType, durationMs, answerText, true, item);
+      session.deferredVerdicts.set(index, {
+        index,
+        outcome: outcome,
+        note,
+        corrective: result.corrective,
+        queueLength: result.queueLength,
+      });
+    })
+    .catch(() => {
+      // Grade failed; treat as partial so the session can continue.
+      return applyVerdict(session, entry, probe, "partial", null, null, durationMs, answerText, true, item).then((result) => {
+        session.deferredVerdicts.set(index, {
+          index,
+          outcome: "partial",
+          note: null,
+          corrective: null,
+          queueLength: result.queueLength,
+        });
+      });
+    })
+    .finally(() => {
+      session.pendingGrades.delete(index);
+    });
+  return p;
+}
+
+/** Apply a resolved verdict: update FSRS, log events, handle error loop-back. */
+async function applyVerdict(
+  session: Session,
+  entry: import("../types.js").QueueEntry,
+  probe: CachedProbe,
+  outcome: Outcome,
+  note: string | null,
+  errorType: ErrorType,
+  durationMs: number,
+  answerText: string | null,
+  fromBackground: boolean,
+  item?: Item
+): Promise<AnswerResult> {
+  if (!item) item = getItem(entry.itemId);
   // FSRS update through the MemoryModel.
-  const median = medianPassDurationMs();
-  const fast = median !== null && durationMs < median;
+  // Use per-(item, modality) normalized median; fall back to global if <3 events.
+  const refChars = item!.statement.length;
+  const normalizedMedian = medianNormalizedDurationMs(entry.itemId, entry.modality, refChars);
+  const normalizedDuration = durationMs / Math.max(1, refChars);
+  const fast = normalizedMedian !== null && normalizedDuration < normalizedMedian;
   const rawRating = outcomeToRating(outcome, entry.modality, fast);
   const rating = rescaleRating(rawRating, entry.modality, outcome);
   const state = loadState(entry.itemId);
@@ -352,17 +449,30 @@ export async function submitAnswer(
       session_id: session.id,
       question: probe.question,
       options: probe.options,
-      answer: answerText ?? response.selfRating ?? null,
+      answer: answerText ?? null,
       verdict_note: note,
       rating,
+      normalized_duration_ms: normalizedMedian !== null ? normalizedDuration : undefined,
       retry: entry.isRetry,
       error_type: errorType,
+      deferred: fromBackground || undefined,
     },
     outcome,
     duration_ms: durationMs,
     error_type: errorType,
   });
-  session.results.push({ itemId: entry.itemId, outcome, isRetry: entry.isRetry });
+  if (!fromBackground) {
+    // For synchronous (mcq/cued) verdicts, record immediately.
+    session.results.push({ itemId: entry.itemId, outcome, isRetry: entry.isRetry });
+  } else {
+    // For background grades, replace any placeholder entry.
+    const existing = session.results.findIndex((r) => r.itemId === entry.itemId && r.outcome === null as any);
+    if (existing >= 0) {
+      session.results[existing] = { itemId: entry.itemId, outcome, isRetry: entry.isRetry };
+    } else {
+      session.results.push({ itemId: entry.itemId, outcome, isRetry: entry.isRetry });
+    }
+  }
 
   // Error loop-back: corrective explanation, then the item returns near the
   // session's end as a recognition-level re-probe. Never end a session with
@@ -424,7 +534,10 @@ export function sessionAccuracy(session: Session): number {
   return points / scored.length;
 }
 
-export function submitCalibration(session: Session, guess: number): { actual: number; note: string } {
+const OVERCONFIDENCE_THRESHOLD = 15; // pp
+const OVERCONFIDENCE_BIAS = 0.85;
+
+export function submitCalibration(session: Session, guess: number): { actual: number; note: string; biasFactor: number } {
   const actual = Math.round(sessionAccuracy(session) * 100);
   const diff = guess - actual;
   const note =
@@ -433,15 +546,30 @@ export function submitCalibration(session: Session, guess: number): { actual: nu
       : diff > 0
         ? `You felt ${diff} points better than you scored — watch for fluency illusions.`
         : `You scored ${-diff} points better than it felt — you know more than you think.`;
+
+  // Apply scheduling bias: if the learner is overconfident (this session or
+  // historically), shrink stability ×0.85 so intervals come sooner.
+  const historicBias = meanCalibrationBias() ?? 0;
+  const isOverconfident = diff > OVERCONFIDENCE_THRESHOLD || historicBias > OVERCONFIDENCE_THRESHOLD;
+  const biasFactor = isOverconfident ? OVERCONFIDENCE_BIAS : 1.0;
+
+  if (biasFactor < 1.0) {
+    const itemIds = [...new Set(session.results.map((r) => r.itemId))];
+    for (const id of itemIds) {
+      const st = loadState(id);
+      if (st) saveState({ ...st, stability: st.stability * biasFactor });
+    }
+  }
+
   logEvent({
     item_id: null,
     type: "calibration",
     modality: null,
-    payload: { session_id: session.id, guess, actual },
+    payload: { session_id: session.id, guess, actual, bias_factor: biasFactor },
     outcome: null,
     duration_ms: null,
   });
-  return { actual, note };
+  return { actual, note, biasFactor };
 }
 
 export function finishSession(session: Session) {
@@ -455,6 +583,19 @@ export function finishSession(session: Session) {
   }));
   const minutes = Math.max(1, Math.round((Date.now() - session.startedAt) / 60_000));
   return { deltas, minutes };
+}
+
+/** Flag a probe question as bad so it's excluded from future generation for this item. */
+export function flagProbe(session: Session, index: number, reason = "bad_probe"): void {
+  const entry = session.plan.queue[index];
+  if (!entry) throw new Error("No probe at that index");
+  const probe = session.probes.get(index);
+  if (!probe?.question) throw new Error("Probe was never fetched or has no question");
+  getDb()
+    .prepare(
+      "INSERT OR IGNORE INTO probe_flags (id, item_id, question, reason, created_at) VALUES (?, ?, ?, ?, ?)"
+    )
+    .run(uid(), entry.itemId, probe.question, reason, new Date().toISOString());
 }
 
 /** "+5 min": extend the current session with more due/new items. */

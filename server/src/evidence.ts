@@ -77,6 +77,26 @@ export function newItemsIntroducedToday(): number {
   return row.n;
 }
 
+/** Count of probe passes in typed or explain modality (for contrast phasing). */
+export function typedExplainPassCount(itemId: string): number {
+  const row = getDb()
+    .prepare(
+      `SELECT COUNT(*) AS n FROM evidence_events
+       WHERE item_id = ? AND type = 'probe' AND outcome = 'pass'
+         AND modality IN ('typed', 'explain')`
+    )
+    .get(itemId) as { n: number };
+  return row.n;
+}
+
+/** Probe questions that have been flagged as bad for this item (excluded from generation). */
+export function getFlaggedProbeQuestions(itemId: string): string[] {
+  const rows = getDb()
+    .prepare("SELECT question FROM probe_flags WHERE item_id = ?")
+    .all(itemId) as { question: string }[];
+  return rows.map((r) => r.question);
+}
+
 /** Probe questions used for an item in the last `days` days (never reuse). */
 export function recentProbeQuestions(itemId: string, days = 60): string[] {
   const rows = getDb()
@@ -106,6 +126,65 @@ export function medianPassDurationMs(): number | null {
     .all() as { duration_ms: number }[];
   if (rows.length === 0) return null;
   return rows[Math.floor(rows.length / 2)].duration_ms;
+}
+
+/**
+ * Per-(item_id, modality) median normalized duration (ms / reference_answer_char).
+ * Normalizes by the reference answer length so longer answers don't always
+ * look "slow". Falls back to the global median if fewer than 3 events exist
+ * for this (item, modality) pair. Returns null if no data at all.
+ */
+export function medianNormalizedDurationMs(
+  itemId: string,
+  modality: string,
+  referenceAnswerChars: number
+): number | null {
+  const refLen = Math.max(1, referenceAnswerChars);
+  const rows = getDb()
+    .prepare(
+      `SELECT duration_ms FROM evidence_events
+       WHERE item_id = ? AND modality = ? AND type = 'probe' AND outcome = 'pass' AND duration_ms IS NOT NULL
+       ORDER BY duration_ms`
+    )
+    .all(itemId, modality) as { duration_ms: number }[];
+
+  const useGlobal = rows.length < 3;
+  const source = useGlobal
+    ? (getDb()
+        .prepare(
+          "SELECT duration_ms FROM evidence_events WHERE type = 'probe' AND outcome = 'pass' AND duration_ms IS NOT NULL ORDER BY duration_ms"
+        )
+        .all() as { duration_ms: number }[])
+    : rows;
+
+  if (source.length === 0) return null;
+  const median = source[Math.floor(source.length / 2)].duration_ms;
+  return median / refLen;
+}
+
+/**
+ * Returns the learner's mean overconfidence (guess − actual) across recent
+ * calibration events. Positive = overconfident. Returns null if no data.
+ */
+export function meanCalibrationBias(): number | null {
+  const rows = getDb()
+    .prepare("SELECT payload FROM evidence_events WHERE type = 'calibration' ORDER BY created_at DESC LIMIT 10")
+    .all() as { payload: string }[];
+  if (rows.length === 0) return null;
+  let sum = 0;
+  let n = 0;
+  for (const r of rows) {
+    try {
+      const p = JSON.parse(r.payload);
+      if (typeof p.guess === "number" && typeof p.actual === "number") {
+        sum += p.guess - p.actual;
+        n++;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return n > 0 ? sum / n : null;
 }
 
 export function sessionsInWeek(weekOffset: 0 | 1): number {

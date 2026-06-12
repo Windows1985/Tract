@@ -114,8 +114,10 @@ Endothermic reactions absorb heat from their surroundings.`;
           statement: string;
         };
         const r = await submitAnswer(session, i, 6000, { text: item.statement });
-        expect(r.outcome).toBe("pass");
-        expect(r.note).toBeTruthy();
+        // Grading is deferred; flush it so loop-back / corrective run before next iteration.
+        await Promise.all([...session.pendingGrades.values()]);
+        const verdict = [...session.deferredVerdicts.values()].find((v) => v.index === i);
+        expect(verdict?.outcome ?? r.outcome).toBe("pass");
       }
     }
 

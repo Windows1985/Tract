@@ -2,12 +2,13 @@ import { getDb, getDailyMinutes } from "../db.js";
 import type { Kind, MemoryStateRow, Modality, QueueEntry, SessionPlan } from "../types.js";
 import type { SchedulerPolicy } from "./SchedulerPolicy.js";
 import type { MemoryModel } from "../memory/MemoryModel.js";
-import { lastProbeOutcome, newItemsIntroducedToday, sessionPassCount } from "../evidence.js";
+import { lastProbeOutcome, newItemsIntroducedToday, sessionPassCount, typedExplainPassCount } from "../evidence.js";
 import { State } from "ts-fsrs";
 
 const SECONDS_PER_PROBE = 35;
 const SWEEP_SECONDS = 90;
-const NEW_PER_DAY = 10;
+const NEW_PER_DAY_BASE = 10;
+const NEW_PER_DAY_MAX = 20;
 const SWEEP_MIN_WEAK_ITEMS = 8;
 const SWEEP_RETRIEVABILITY = 0.92;
 const MAINTENANCE_RETENTION = 0.75;
@@ -122,7 +123,7 @@ export class V1Scheduler implements SchedulerPolicy {
     due.sort(byR);
     fresh.sort((a, b) => a.state.due.localeCompare(b.state.due));
 
-    const newBudget = Math.max(0, NEW_PER_DAY - newItemsIntroducedToday());
+    const newBudget = Math.max(0, this.goalAwareNewCap(goals, goalItems, now) - newItemsIntroducedToday());
 
     // Sweep decision: any goal with ≥8 items below 0.92 retrievability →
     // sweep the most at-risk goal region.
@@ -183,15 +184,64 @@ export class V1Scheduler implements SchedulerPolicy {
         contrastItemId: anyContrast.get(c.itemId),
       });
     };
+    // Track which pairs should be separated (≥3 typed/explain passes each).
+    const shouldSeparate = (a: string, b: string) =>
+      typedExplainPassCount(a) >= 3 && typedExplainPassCount(b) >= 3;
+
     for (const c of ordered) {
       if (placed.has(c.itemId)) continue;
       push(c);
       for (const partnerId of contrastsOf.get(c.itemId) ?? []) {
         const partner = byId.get(partnerId);
-        if (partner && !placed.has(partnerId)) push(partner);
+        if (!partner || placed.has(partnerId)) continue;
+        if (!shouldSeparate(c.itemId, partnerId)) push(partner);
+        // Separated pairs: let partner be placed later by the main loop (no adjacency).
+      }
+    }
+
+    // Post-process: for pairs that should be separated but ended up <4 apart,
+    // move the second occurrence to position (first + 4).
+    for (const c of ordered) {
+      for (const partnerId of contrastsOf.get(c.itemId) ?? []) {
+        if (!shouldSeparate(c.itemId, partnerId)) continue;
+        const posA = result.findIndex((e) => e.itemId === c.itemId);
+        const posB = result.findIndex((e) => e.itemId === partnerId);
+        if (posA === -1 || posB === -1) continue;
+        const gap = Math.abs(posA - posB);
+        if (gap < 4) {
+          // Remove the later-appearing item and reinsert ≥4 after the earlier.
+          const [earlier, later] = posA < posB ? [posA, posB] : [posB, posA];
+          const [removed] = result.splice(later, 1);
+          const target = Math.min(result.length, earlier + 4);
+          result.splice(target, 0, removed);
+        }
       }
     }
     return result;
+  }
+
+  /**
+   * Goal-aware new-item cap: base 10/day, ×3 if any goal is in the final 14
+   * days (successive-relearning mode) to front-load new material before the
+   * deadline. Hard cap at 20/day.
+   */
+  private goalAwareNewCap(
+    goals: { id: string; target_date: string | null }[],
+    goalItems: { goal_id: string; item_id: string }[],
+    now: Date
+  ): number {
+    let factor = 1;
+    for (const g of goals) {
+      if (!g.target_date) continue;
+      const daysToTarget = (new Date(g.target_date).getTime() - now.getTime()) / 86_400_000;
+      if (daysToTarget >= 0 && daysToTarget <= RELEARN_WINDOW_DAYS) {
+        factor = 3;
+        break;
+      }
+    }
+    // Suppress unused-variable lint for goalItems (kept for future per-goal calc).
+    void goalItems;
+    return Math.min(NEW_PER_DAY_MAX, NEW_PER_DAY_BASE * factor);
   }
 
   private pickSweep(
